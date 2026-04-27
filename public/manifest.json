@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Copilot Sidebar",
+  "version": "1.0.0",
+  "description": "A powerful AI copilot for your browser built with Vue and OpenAI SDK.",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "action": {
+    "default_title": "Open Copilot Sidebar"
+  }
+}

@@ -1,0 +1,175 @@
+<script setup>
+import { ref } from 'vue'
+import Chat from './components/Chat.vue'
+import Settings from './components/Settings.vue'
+import { APP_NAME, APP_VERSION } from '../config/constants'
+
+const currentView = ref('chat')
+const chatRef = ref(null)
+
+const setView = (view) => {
+  currentView.value = view
+}
+
+const handleClearHistory = () => {
+  if (chatRef.value && typeof chatRef.value.clearHistory === 'function') {
+    chatRef.value.clearHistory()
+  }
+}
+</script>
+
+<template>
+  <div class="header">
+    <h1>
+      <span class="dot" :class="{ running: currentView === 'chat' }"></span>
+      {{ APP_NAME }}
+      <span class="app-version">v{{ APP_VERSION }}</span>
+    </h1>
+  </div>
+
+  <div class="tab-nav">
+    <div 
+      class="tab-item" 
+      :class="{ active: currentView === 'chat' }" 
+      @click="setView('chat')"
+      title="Task"
+    >
+      <span class="i i-message-square tab-icon"></span>
+      <span>Task</span>
+    </div>
+    
+    <div class="nav-actions">
+      <div 
+        v-if="currentView === 'chat'"
+        class="tab-item action-icon" 
+        @click="handleClearHistory"
+        title="Clear History"
+      >
+        <span class="i i-ban"></span>
+      </div>
+
+      <div 
+        class="tab-item settings-icon" 
+        :class="{ active: currentView === 'settings' }" 
+        @click="setView('settings')"
+        title="Settings"
+      >
+        <span class="i i-sun"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="view-container">
+    <Chat v-show="currentView === 'chat'" ref="chatRef" />
+    <Settings v-show="currentView === 'settings'" />
+  </div>
+</template>
+
+<style scoped>
+.header {
+  padding: 20px;
+  padding-bottom: 0px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.header h1 {
+  font-size: 15px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  letter-spacing: 0px;
+  color: var(--text);
+}
+
+.header .app-version {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text2);
+}
+
+.header .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text2);
+  transition: background 0.3s;
+}
+
+.header .dot.running {
+  background: var(--success);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.tab-nav {
+  display: flex;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 24px;
+  gap: 20px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.nav-actions {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.tab-item {
+  padding: 0 0 12px 0;
+  font-size: 12px;
+  color: rgba(223, 206, 179, 0.62);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-item.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 500;
+  position: relative;
+  bottom: -1px;
+}
+
+.tab-item:hover:not(.active) {
+  color: var(--text);
+}
+
+.tab-item.action-icon:hover {
+  color: var(--error);
+}
+
+.tab-item.settings-icon {
+  min-width: 18px;
+  padding-bottom: 12px;
+}
+
+.view-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tab-icon {
+  font-size: 14px;
+}
+</style>
