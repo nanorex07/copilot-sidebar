@@ -10,7 +10,7 @@ export class BaseProvider {
    * Abstract method for chat completions
    * @param {Array} messages 
    */
-  async chat(messages) {
+  async chat(messages, tools) {
     throw new Error('chat() must be implemented by provider');
   }
 

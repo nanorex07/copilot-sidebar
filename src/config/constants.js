@@ -15,7 +15,8 @@ export const LLM_PROVIDERS = {
 
 export const DEFAULT_OPENAI_CONFIG = {
   baseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4o'
+  model: 'gpt-4o',
+  temperature: 0.2
 };
 
 // ── Agent Loop Limits ──

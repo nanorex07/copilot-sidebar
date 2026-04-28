@@ -425,6 +425,85 @@
     };
   }
 
+  // ===== STRUCTURED EXTRACTION =====
+
+  function extractStructured(payload = {}) {
+    const hint = String(payload.hint || '').toLowerCase();
+    const selector = payload.selector;
+    const maxItems = Math.min(Math.max(Number(payload.maxItems) || 30, 1), 100);
+
+    let containers = [];
+    if (selector) {
+      try { containers = Array.from(document.querySelectorAll(selector)); } catch { containers = []; }
+    } else {
+      // Heuristic: look for common list item patterns
+      const patterns = [
+        'article', '[role="article"]', '.result', '.item', '.card',
+        'li', 'tr', '.product', '.search-result'
+      ];
+      for (const p of patterns) {
+        const found = Array.from(document.querySelectorAll(p)).filter(isElementVisible);
+        if (found.length >= 3) {
+          containers = found;
+          break;
+        }
+      }
+    }
+
+    const items = containers.slice(0, maxItems).map((el) => {
+      const item = {
+        agentId: ensureAgentId(el),
+        text: el.innerText?.trim().slice(0, 500) || '',
+      };
+
+      // Try to find links
+      const link = el.querySelector('a');
+      if (link) item.url = link.href;
+
+      // Try to find images
+      const img = el.querySelector('img');
+      if (img) item.image = img.src || img.getAttribute('data-src');
+
+      return item;
+    });
+
+    return {
+      success: true,
+      hint,
+      count: items.length,
+      items,
+    };
+  }
+
+  // ===== WAIT FOR CONDITION =====
+
+  async function waitFor(payload = {}) {
+    const { condition, value, timeoutMs = 10000, pollMs = 500 } = payload;
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      let satisfied = false;
+      switch (condition) {
+        case 'element':
+          satisfied = !!document.querySelector(value);
+          break;
+        case 'text':
+          satisfied = document.body.innerText.includes(value);
+          break;
+        case 'url_includes':
+          satisfied = window.location.href.includes(value);
+          break;
+        case 'navigation_complete':
+          satisfied = document.readyState === 'complete';
+          break;
+      }
+      if (satisfied) return { success: true, condition, value, elapsedMs: Date.now() - start };
+      await new Promise(r => setTimeout(r, pollMs));
+    }
+
+    return makeError('TIMEOUT', `Timed out waiting for ${condition}: ${value}`);
+  }
+
   // ===== DOM ACTIONS =====
 
   function setTextLikeValue(el, value) {
@@ -554,6 +633,17 @@
         return { success: true, description: `Pressed ${params.key}` };
       }
 
+
+      case 'navigate': {
+        const actionType = params.action || 'go';
+        switch (actionType) {
+          case 'back': window.history.back(); break;
+          case 'forward': window.history.forward(); break;
+          case 'reload': window.location.reload(); break;
+        }
+        return { success: true, description: `Navigated: ${actionType}` };
+      }
+
       default:
         return makeError(ACTION_ERROR.INVALID_ACTION, `Unknown action type: ${type}`);
     }
@@ -561,7 +651,7 @@
 
   // ===== MESSAGE HANDLER =====
 
-  function onRuntimeMessage(msg, sender, sendResponse) {
+  async function onRuntimeMessage(msg, sender, sendResponse) {
     const { action, payload } = msg;
 
     try {
@@ -578,6 +668,13 @@
         case 'findText':
           sendResponse(findTextOnPage(payload));
           break;
+        case 'extractStructured':
+          sendResponse(extractStructured(payload));
+          break;
+        case 'waitFor':
+          const waitResult = await waitFor(payload);
+          sendResponse(waitResult);
+          break;
         case 'executeAction':
           sendResponse(executeAction(payload));
           break;
@@ -588,34 +685,20 @@
             readyState: document.readyState,
           });
           break;
-        // Legacy support for basic context
-        case 'GET_PAGE_CONTEXT':
-          sendResponse({
-            success: true,
-            data: {
-              url: window.location.href,
-              title: document.title,
-              text: (document.body?.innerText || '').substring(0, 10000).replace(/\s+/g, ' ').trim(),
-            },
-          });
-          break;
         default:
           sendResponse(makeError(ACTION_ERROR.INVALID_ACTION, `Unknown action: ${action}`));
       }
     } catch (err) {
       sendResponse(makeError('CONTENT_HANDLER_FAILED', err.message));
     }
-
-    return true; // Keep message channel open
   }
 
   // Handle both message formats (legacy type-based and new action-based)
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Support legacy { type: 'GET_PAGE_CONTEXT' } format
-    if (msg.type && !msg.action) {
-      return onRuntimeMessage({ action: msg.type, payload: msg }, sender, sendResponse);
-    }
-    return onRuntimeMessage(msg, sender, sendResponse);
+    const wrappedMsg = (msg.type && !msg.action) ? { action: msg.type, payload: msg } : msg;
+    onRuntimeMessage(wrappedMsg, sender, sendResponse);
+    return true; // Keep message channel open
   });
 
   console.log('[Copilot Sidebar] Content script initialized');

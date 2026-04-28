@@ -117,7 +117,11 @@ function formatToolLabel(tool, args) {
     case 'type': return `Typing "${args.text}" into [${args.target}]`
     case 'select': return `Selecting "${args.value}" in [${args.target}]`
     case 'scroll': return `Scrolling ${args.direction}`
+    case 'hover': return `Hovering element [${args.target}]`
     case 'press_key': return `Pressing ${args.key}`
+    case 'extract_structured': return `Extracting structured data`
+    case 'wait_for': return `Waiting for ${args.condition}`
+    case 'navigate': return `Navigating ${args.action}`
     case 'done': return `Task complete`
     case 'fail': return `Task failed: ${args.reason || ''}`
     default: return `${tool}(${JSON.stringify(args)})`
@@ -134,6 +138,12 @@ function toggleArgs(index) {
 
 function toggleResult(index) {
   steps.value[index].resultCollapsed = !steps.value[index].resultCollapsed
+}
+
+function toggleThought(index) {
+  if (steps.value[index].type === 'thought') {
+    steps.value[index].expanded = !steps.value[index].expanded
+  }
 }
 
 const scrollToBottom = async () => {
@@ -241,9 +251,9 @@ defineExpose({ clearHistory })
         </div>
 
         <!-- Thought -->
-        <div v-else-if="step.type === 'thought'" class="step thought">
+        <div v-else-if="step.type === 'thought'" class="step thought" :class="{ expanded: step.expanded }" @click="toggleThought(index)">
           <div class="step-icon"><span class="i i-brain"></span></div>
-          <div class="step-content step-inline">{{ step.content }}</div>
+          <div class="step-content" :class="{ 'step-inline': !step.expanded }">{{ step.content }}</div>
         </div>
 
         <!-- Action -->
@@ -485,6 +495,24 @@ defineExpose({ clearHistory })
   font-size: 13px;
   color: var(--text2);
   max-width: 100%;
+}
+
+.step.thought {
+  cursor: pointer;
+  transition: background 0.2s, border-radius 0.2s;
+}
+
+.step.thought:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.step.thought.expanded {
+  align-items: flex-start;
+}
+
+.step.thought.expanded .step-content {
+  white-space: pre-wrap;
 }
 
 .step-icon {

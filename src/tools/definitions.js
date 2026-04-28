@@ -56,6 +56,31 @@ export const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'extract_structured',
+      description: 'Extract repeated content blocks (products/results/cards) into structured JSON objects with fields like text, url, and image.',
+      parameters: {
+        type: 'object',
+        properties: {
+          hint: {
+            type: 'string',
+            description: 'Optional hint for target list type, e.g. "item cards", "search results".',
+          },
+          selector: {
+            type: 'string',
+            description: 'Optional CSS selector for list item roots. If omitted, heuristics are used.',
+          },
+          maxItems: {
+            type: 'integer',
+            description: 'Maximum number of extracted items (default 30, max 100).',
+          },
+        },
+      },
+    },
+  },
+
+  {
+    type: 'function',
+    function: {
       name: 'find',
       description: 'Find interactive elements on the page using a natural language description. Returns matching elements with their agent IDs, sorted by relevance. Example: find("search button"), find("email input").',
       parameters: {
@@ -102,6 +127,24 @@ export const TOOLS = [
           target: {
             type: 'integer',
             description: 'The agent ID number [N] of the element to click.',
+          },
+        },
+        required: ['target'],
+      },
+    },
+  },
+
+  {
+    type: 'function',
+    function: {
+      name: 'hover',
+      description: 'Hover the mouse over an element identified by its agent [id]. Useful for triggering dropdowns or tooltips.',
+      parameters: {
+        type: 'object',
+        properties: {
+          target: {
+            type: 'integer',
+            description: 'The agent ID of the element to hover over.',
           },
         },
         required: ['target'],
@@ -198,6 +241,34 @@ export const TOOLS = [
     },
   },
 
+  {
+    type: 'function',
+    function: {
+      name: 'wait_for',
+      description: 'Wait for a condition to be met on the page. Useful for handling asynchronous content loading.',
+      parameters: {
+        type: 'object',
+        properties: {
+          condition: {
+            type: 'string',
+            enum: ['element', 'text', 'url_includes', 'navigation_complete'],
+            description: 'Condition type to wait for.',
+          },
+          value: {
+            type: 'string',
+            description: 'Value associated with the condition (e.g. CSS selector for element, text snippet for text).',
+          },
+          timeoutMs: {
+            type: 'integer',
+            description: 'Maximum time to wait in milliseconds (default 10000).',
+          },
+        },
+        required: ['condition', 'value'],
+      },
+    },
+  },
+
+
   // ── Completion ──
 
   {
@@ -218,6 +289,25 @@ export const TOOLS = [
           },
         },
         required: ['summary'],
+      },
+    },
+  },
+
+  {
+    type: 'function',
+    function: {
+      name: 'navigate',
+      description: 'Navigate back, forward, or reload the current page.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['back', 'forward', 'reload'],
+            description: 'Navigation action.',
+          },
+        },
+        required: ['action'],
       },
     },
   },

@@ -14,22 +14,6 @@ export class OpenAIProvider extends BaseProvider {
       dangerouslyAllowBrowser: true,
     });
   }
-
-  /**
-   * Plain chat completion (no tools).
-   */
-  async chat(messages) {
-    this.validateConfig();
-    const response = await this.client.chat.completions.create({
-      model: this.config.model || DEFAULT_OPENAI_CONFIG.model,
-      messages,
-    });
-    return {
-      text: response.choices[0].message.content,
-      usage: response.usage,
-    };
-  }
-
   /**
    * Chat completion with tool/function calling support.
    * Returns the raw message object including tool_calls.
@@ -38,10 +22,11 @@ export class OpenAIProvider extends BaseProvider {
    * @param {Array} tools - OpenAI tool definitions
    * @returns {{ message: object, usage: object }}
    */
-  async chatWithTools(messages, tools) {
+  async chat(messages, tools) {
     this.validateConfig();
     const response = await this.client.chat.completions.create({
       model: this.config.model || DEFAULT_OPENAI_CONFIG.model,
+      temperature: this.config.temperature !== undefined ? this.config.temperature : DEFAULT_OPENAI_CONFIG.temperature,
       messages,
       tools,
     });

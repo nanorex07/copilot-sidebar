@@ -58,40 +58,24 @@ export class Agent {
       this._notifyStatus();
 
       try {
-         // 1. Load provider config
-         const config = await storage.get(STORAGE_STORES.SETTINGS, LLM_PROVIDERS.OPENAI);
-         if (!config || !config.apiKey) {
-            throw new Error('API Key not found. Please configure it in Settings.');
-         }
-         const provider = createLLMProvider(LLM_PROVIDERS.OPENAI, config);
-
-         const fullSystemPrompt = SYSTEM_PROMPT;
-
-         const timestamp = this._timestamp();
-         this.history.push({ role: 'user', content: goal, timestamp });
-
-         // Build conversation messages for LLM (only fields OpenAI understands)
+         const provider = await this._getProvider();
          const messages = [
-            { role: 'system', content: fullSystemPrompt },
+            { role: 'system', content: SYSTEM_PROMPT },
             ...this._buildLLMMessages(),
+            { role: 'user', content: goal }
          ];
 
-         // 4. Agent loop
+         this.history.push({ role: 'user', content: goal, timestamp: this._timestamp() });
+
          let step = 0;
          let errorCount = 0;
 
          while (step < AGENT_MAX_STEPS && errorCount < AGENT_MAX_TOOL_ERRORS && !this._aborted) {
             step++;
 
-            // Call LLM
-            let response;
-            try {
-               this._notifyStatus('thinking');
-               response = await provider.chatWithTools(messages, TOOLS);
-               this._notifyStatus('running');
-            } catch (err) {
+            const response = await this._callLLM(provider, messages);
+            if (!response) {
                errorCount++;
-               this._notifyStep(STEP_TYPES.ERROR, `LLM call failed: ${err.message}`);
                if (errorCount >= AGENT_MAX_TOOL_ERRORS) {
                   this._notifyStep(STEP_TYPES.ERROR, `Reached maximum tool errors (${AGENT_MAX_TOOL_ERRORS}). Task aborted.`);
                   this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
@@ -102,172 +86,187 @@ export class Agent {
             }
 
             const assistantMsg = response.message;
-
-            // If assistant has text content (no tool calls), we're done
-            if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-               const text = assistantMsg.content || '';
-               messages.push({ role: 'assistant', content: text });
-               this.history.push({ role: 'assistant', content: text, timestamp: this._timestamp() });
-               await this._persistHistory();
-               this._notifyStep(STEP_TYPES.SUCCESS, text);
-               break;
-            }
-
-            // Add assistant message with tool_calls to conversation
-            messages.push({
-               role: 'assistant',
-               content: assistantMsg.content || null,
-               tool_calls: assistantMsg.tool_calls,
-            });
-
-            // Notify UI of reasoning if present
-            if (assistantMsg.content) {
-               this._notifyStep(STEP_TYPES.THOUGHT, assistantMsg.content);
-            }
-
-            // Also persist the assistant tool_calls to history
-            this.history.push({
-               role: 'assistant',
-               content: assistantMsg.content || null,
-               tool_calls: assistantMsg.tool_calls,
-               timestamp: this._timestamp(),
-            });
+            const isDone = await this._handleAssistantResponse(assistantMsg, messages);
+            if (isDone) break;
 
             // Process each tool call
-            for (const toolCall of assistantMsg.tool_calls) {
-               if (this._aborted) break;
-
-               const toolName = toolCall.function.name;
-               let toolArgs = {};
-               try {
-                  toolArgs = JSON.parse(toolCall.function.arguments || '{}');
-               } catch {
-                  toolArgs = {};
-               }
-
-               // Handle terminal tools
-               if (TERMINAL_TOOLS.has(toolName)) {
-                  const toolResult = this._handleTerminalTool(toolName, toolArgs);
-                  const toolResultStr = JSON.stringify(toolResult);
-
-                  messages.push({
-                     role: 'tool',
-                     tool_call_id: toolCall.id,
-                     content: toolResultStr,
-                  });
-
-                  // Persist tool result
-                  this.history.push({
-                     role: 'tool',
-                     tool_call_id: toolCall.id,
-                     content: toolResultStr,
-                     _meta: { toolName, toolArgs, summary: toolName === 'done' ? 'Task complete' : toolArgs.reason, result: toolResult },
-                     timestamp: this._timestamp(),
-                  });
-
-                  if (toolName === 'done') {
-                     const answer = toolArgs.answer || toolArgs.summary || '';
-                     this.history.push({ role: 'assistant', content: answer, timestamp: this._timestamp() });
-                     await this._persistHistory();
-                     // this._notifyStep(STEP_TYPES.TOOL_CALL, JSON.stringify({ tool: toolName, args: toolArgs, result: toolResult, summary: 'Task complete' }));
-                     this._notifyStep(STEP_TYPES.SUCCESS, answer);
-                     this.status = 'idle';
-                     this._notifyStatus();
-                     return;
+            let taskFinished = false;
+            if (assistantMsg.tool_calls) {
+               for (const toolCall of assistantMsg.tool_calls) {
+                  if (this._aborted) break;
+                  const execResult = await this._executeToolCall(toolCall, messages);
+                  if (!execResult.success) errorCount++;
+                  if (execResult.terminal) {
+                     taskFinished = true;
+                     break;
                   }
-                  if (toolName === 'fail') {
-                     const reason = toolArgs.reason || 'Task failed.';
-                     this.history.push({ role: 'assistant', content: `Failed: ${reason}`, timestamp: this._timestamp() });
-                     await this._persistHistory();
-                     // this._notifyStep(STEP_TYPES.TOOL_CALL, JSON.stringify({ tool: toolName, args: toolArgs, result: toolResult, summary: `Failed: ${reason}` }));
-                     this._notifyStep(STEP_TYPES.ERROR, reason);
-                     this.status = 'idle';
-                     this._notifyStatus();
-                     return;
-                  }
-                  continue;
                }
-
-               // Execute tool via content script
-               const actionLabel = this._getToolActionLabel(toolName, toolArgs);
-               this._notifyStep(STEP_TYPES.ACTION, actionLabel);
-
-               const handler = getToolHandler(toolName);
-               if (!handler) {
-                  const errorResult = { success: false, error: `Unknown tool: ${toolName}` };
-                  messages.push({
-                     role: 'tool',
-                     tool_call_id: toolCall.id,
-                     content: JSON.stringify(errorResult),
-                  });
-                  this.history.push({
-                     role: 'tool',
-                     tool_call_id: toolCall.id,
-                     content: JSON.stringify(errorResult),
-                     _meta: { toolName, toolArgs, summary: `Unknown tool: ${toolName}`, result: errorResult },
-                     timestamp: this._timestamp(),
-                  });
-                  this._notifyStep(STEP_TYPES.TOOL_CALL, JSON.stringify({ tool: toolName, args: toolArgs, result: errorResult, summary: `Unknown tool: ${toolName}` }));
-                  errorCount++;
-                  continue;
-               }
-
-               const payload = handler.buildPayload(toolArgs);
-               let result;
-               try {
-                  result = await this._sendToContent(handler.contentAction, payload);
-               } catch (err) {
-                  result = { success: false, error: err.message };
-                  errorCount++;
-               }
-
-               // Format summary
-               const summary = handler.formatResult(result);
-
-               // Add tool result to LLM conversation
-               const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
-               messages.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  content: resultStr.slice(0, 30000),
-               });
-
-               // Persist tool result to history
-               this.history.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  content: resultStr.slice(0, 30000),
-                  _meta: { toolName, toolArgs, summary, result },
-                  timestamp: this._timestamp(),
-               });
-
-               // Notify UI — single combined event with args + result
-               this._notifyStep(STEP_TYPES.TOOL_CALL, JSON.stringify({ tool: toolName, args: toolArgs, result, summary }));
             }
 
-            // Persist after each batch of tool calls
             await this._persistHistory();
+            if (taskFinished) break;
          }
 
-         // Loop ended without done/fail
-         if (step >= AGENT_MAX_STEPS && !this._aborted) {
-            this._notifyStep(STEP_TYPES.ERROR, `Reached maximum steps (${AGENT_MAX_STEPS}). Task stopped.`);
-            this.history.push({ role: 'assistant', content: `Task stopped: reached maximum steps (${AGENT_MAX_STEPS}).`, timestamp: this._timestamp() });
-            await this._persistHistory();
-         } else if (errorCount >= AGENT_MAX_TOOL_ERRORS && !this._aborted) {
-            // Already notified in the loop, but ensure history is consistent
-            if (!this.history[this.history.length - 1].content.includes('Task aborted')) {
-               this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
-               await this._persistHistory();
-            }
-         }
-
+         this._handleLoopEnd(step, errorCount);
       } catch (error) {
          this._notifyStep(STEP_TYPES.ERROR, error.message);
          console.error('[Agent Error]', error);
       } finally {
          this.status = 'idle';
          this._notifyStatus();
+      }
+   }
+
+   async _getProvider() {
+      const config = await storage.get(STORAGE_STORES.SETTINGS, LLM_PROVIDERS.OPENAI);
+      return createLLMProvider(LLM_PROVIDERS.OPENAI, config);
+   }
+
+   async _callLLM(provider, messages) {
+      try {
+         this._notifyStatus('thinking');
+         const response = await provider.chat(messages, TOOLS);
+         this._notifyStatus('running');
+         return response;
+      } catch (err) {
+         this._notifyStep(STEP_TYPES.ERROR, `LLM call failed: ${err.message}`);
+         return null;
+      }
+   }
+
+   async _handleAssistantResponse(assistantMsg, messages) {
+      // If no tool calls, it's a direct response
+      if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+         const text = assistantMsg.content || '';
+         messages.push({ role: 'assistant', content: text });
+         this.history.push({ role: 'assistant', content: text, timestamp: this._timestamp() });
+         await this._persistHistory();
+         this._notifyStep(STEP_TYPES.SUCCESS, text);
+         return true;
+      }
+
+      // Add assistant message with tool_calls to conversation
+      messages.push({
+         role: 'assistant',
+         content: assistantMsg.content || null,
+         tool_calls: assistantMsg.tool_calls,
+      });
+
+      // Notify UI of reasoning if present
+      if (assistantMsg.content) {
+         this._notifyStep(STEP_TYPES.THOUGHT, assistantMsg.content);
+      }
+
+      this.history.push({
+         role: 'assistant',
+         content: assistantMsg.content || null,
+         tool_calls: assistantMsg.tool_calls,
+         timestamp: this._timestamp(),
+      });
+
+      return false;
+   }
+
+   async _executeToolCall(toolCall, messages) {
+      const toolName = toolCall.function.name;
+      let toolArgs = {};
+      try {
+         toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+      } catch {
+         toolArgs = {};
+      }
+
+      // 1. Handle Terminal Tools
+      if (TERMINAL_TOOLS.has(toolName)) {
+         await this._handleTerminalExecution(toolCall, toolName, toolArgs, messages);
+         return { success: true, terminal: true };
+      }
+
+      // 2. Handle Content Script Tools
+      const actionLabel = this._getToolActionLabel(toolName, toolArgs);
+      this._notifyStep(STEP_TYPES.ACTION, actionLabel);
+
+      const handler = getToolHandler(toolName);
+      if (!handler) {
+         await this._handleUnknownTool(toolCall, toolName, toolArgs, messages);
+         return { success: false, terminal: false };
+      }
+
+      const payload = handler.buildPayload(toolArgs);
+      let result;
+      try {
+         result = await this._sendToContent(handler.contentAction, payload);
+      } catch (err) {
+         result = { success: false, error: err.message };
+      }
+
+      const summary = handler.formatResult(result);
+      this._recordToolResult(toolCall, toolName, toolArgs, result, summary, messages);
+      return { success: result.success !== false, terminal: false };
+   }
+
+   async _handleTerminalExecution(toolCall, toolName, toolArgs, messages) {
+      const toolResult = this._handleTerminalTool(toolName, toolArgs);
+      const toolResultStr = JSON.stringify(toolResult);
+
+      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: toolResultStr });
+      this.history.push({
+         role: 'tool',
+         tool_call_id: toolCall.id,
+         content: toolResultStr,
+         _meta: { toolName, toolArgs, summary: toolName === 'done' ? 'Task complete' : toolArgs.reason, result: toolResult },
+         timestamp: this._timestamp(),
+      });
+
+      if (toolName === 'done') {
+         const answer = toolArgs.answer || toolArgs.summary || '';
+         this.history.push({ role: 'assistant', content: answer, timestamp: this._timestamp() });
+         await this._persistHistory();
+         this._notifyStep(STEP_TYPES.SUCCESS, answer);
+         this.status = 'idle';
+         this._notifyStatus();
+      } else if (toolName === 'fail') {
+         const reason = toolArgs.reason || 'Task failed.';
+         this.history.push({ role: 'assistant', content: `Failed: ${reason}`, timestamp: this._timestamp() });
+         await this._persistHistory();
+         this._notifyStep(STEP_TYPES.ERROR, reason);
+         this.status = 'idle';
+         this._notifyStatus();
+      }
+      return true;
+   }
+
+   async _handleUnknownTool(toolCall, toolName, toolArgs, messages) {
+      const errorResult = { success: false, error: `Unknown tool: ${toolName}` };
+      this._recordToolResult(toolCall, toolName, toolArgs, errorResult, `Unknown tool: ${toolName}`, messages);
+      return false;
+   }
+
+   _recordToolResult(toolCall, toolName, toolArgs, result, summary, messages) {
+      const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+      const truncatedResult = resultStr.slice(0, 30000);
+
+      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: truncatedResult });
+      this.history.push({
+         role: 'tool',
+         tool_call_id: toolCall.id,
+         content: truncatedResult,
+         _meta: { toolName, toolArgs, summary, result },
+         timestamp: this._timestamp(),
+      });
+
+      this._notifyStep(STEP_TYPES.TOOL_CALL, JSON.stringify({ tool: toolName, args: toolArgs, result, summary }));
+   }
+
+   _handleLoopEnd(step, errorCount) {
+      if (step >= AGENT_MAX_STEPS && !this._aborted) {
+         this._notifyStep(STEP_TYPES.ERROR, `Reached maximum steps (${AGENT_MAX_STEPS}). Task stopped.`);
+         this.history.push({ role: 'assistant', content: `Task stopped: reached maximum steps (${AGENT_MAX_STEPS}).`, timestamp: this._timestamp() });
+         this._persistHistory();
+      } else if (errorCount >= AGENT_MAX_TOOL_ERRORS && !this._aborted) {
+         this._notifyStep(STEP_TYPES.ERROR, `Reached maximum tool errors (${AGENT_MAX_TOOL_ERRORS}). Task aborted.`);
+         this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
+         this._persistHistory();
       }
    }
 
@@ -434,7 +433,11 @@ export class Agent {
          case 'type': return `Typing into [${args.target}]...`;
          case 'select': return `Selecting value in [${args.target}]...`;
          case 'scroll': return `Scrolling ${args.direction}...`;
+         case 'hover': return `Hovering over [${args.target}]...`;
          case 'press_key': return `Pressing ${args.key} key...`;
+         case 'extract_structured': return `Extracting structured data...`;
+         case 'wait_for': return `Waiting for ${args.condition}...`;
+         case 'navigate': return `Navigating ${args.action}...`;
          case 'done': return 'Finishing task...';
          case 'fail': return 'Reporting failure...';
          default: return `Executing ${tool}...`;

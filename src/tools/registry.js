@@ -130,6 +130,53 @@ const TOOL_REGISTRY = {
     }),
     formatResult: (result) => result?.description || `Pressed key.`,
   },
+
+  hover: {
+    contentAction: CONTENT_ACTIONS.EXECUTE_ACTION,
+    buildPayload: (args) => ({
+      type: 'hover',
+      target: args.target,
+      params: {},
+    }),
+    formatResult: (result) => result?.description || 'Hovered element.',
+  },
+
+  extract_structured: {
+    contentAction: 'extractStructured',
+    buildPayload: (args) => ({
+      hint: args.hint || '',
+      selector: args.selector || '',
+      maxItems: args.maxItems || 30,
+    }),
+    formatResult: (result) => {
+      const count = result?.count || 0;
+      return `Extracted ${count} structured items.`;
+    },
+  },
+
+  wait_for: {
+    contentAction: 'waitFor',
+    buildPayload: (args) => ({
+      condition: args.condition,
+      value: args.value,
+      timeoutMs: args.timeoutMs || 10000,
+    }),
+    formatResult: (result) => {
+      if (result.success) return `Condition "${result.condition}" met.`;
+      return `Wait failed: ${result.reason || 'Timeout'}`;
+    },
+  },
+
+
+  navigate: {
+    contentAction: CONTENT_ACTIONS.EXECUTE_ACTION,
+    buildPayload: (args) => ({
+      type: 'navigate',
+      target: null,
+      params: { action: args.action },
+    }),
+    formatResult: (result) => result?.description || 'Navigation complete.',
+  },
 };
 
 /**
