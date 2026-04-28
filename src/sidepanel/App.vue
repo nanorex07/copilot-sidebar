@@ -28,33 +28,37 @@ const handleClearHistory = () => {
   </div>
 
   <div class="tab-nav">
-    <div 
-      class="tab-item" 
-      :class="{ active: currentView === 'chat' }" 
-      @click="setView('chat')"
-      title="Task"
-    >
-      <span class="i i-message-square tab-icon"></span>
-      <span>Task</span>
+    <div class="tab-group">
+      <div 
+        class="tab-item" 
+        :class="{ active: currentView === 'chat' }" 
+        @click="setView('chat')"
+        title="Task"
+      >
+        <span class="i i-message-square tab-icon"></span>
+        <span>Task</span>
+      </div>
+
+      <div 
+        class="tab-item" 
+        :class="{ active: currentView === 'settings' }" 
+        @click="setView('settings')"
+        title="Settings"
+      >
+        <span class="i i-sun tab-icon"></span>
+        <span>Settings</span>
+      </div>
     </div>
     
     <div class="nav-actions">
       <div 
         v-if="currentView === 'chat'"
-        class="tab-item action-icon" 
+        class="tab-item action-icon clear-btn" 
         @click="handleClearHistory"
         title="Clear History"
       >
+        <span>Clear</span>
         <span class="i i-ban"></span>
-      </div>
-
-      <div 
-        class="tab-item settings-icon" 
-        :class="{ active: currentView === 'settings' }" 
-        @click="setView('settings')"
-        title="Settings"
-      >
-        <span class="i i-sun"></span>
       </div>
     </div>
   </div>
@@ -116,9 +120,13 @@ const handleClearHistory = () => {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   margin-top: 24px;
-  gap: 20px;
   align-items: flex-end;
   justify-content: space-between;
+}
+
+.tab-group {
+  display: flex;
+  gap: 24px;
 }
 
 .nav-actions {
@@ -130,7 +138,7 @@ const handleClearHistory = () => {
 .tab-item {
   padding: 0 0 12px 0;
   font-size: 12px;
-  color: rgba(223, 206, 179, 0.62);
+  color: rgba(211, 218, 227, 0.62);
   border-bottom: 2px solid transparent;
   cursor: pointer;
   white-space: nowrap;
@@ -138,7 +146,7 @@ const handleClearHistory = () => {
   font-weight: 400;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .tab-item.active {
@@ -157,9 +165,8 @@ const handleClearHistory = () => {
   color: var(--error);
 }
 
-.tab-item.settings-icon {
-  min-width: 18px;
-  padding-bottom: 12px;
+.clear-btn {
+  gap: 6px;
 }
 
 .view-container {

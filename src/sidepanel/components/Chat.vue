@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick, defineExpose } from 'vue'
+import { ref, onMounted, nextTick, defineExpose, watch } from 'vue'
 import { Agent } from '../../services/agent'
 import { parseMarkdown } from '../../services/markdown'
 import { STEP_TYPES } from '../../config/constants'
@@ -7,9 +7,14 @@ import { STEP_TYPES } from '../../config/constants'
 const goal = ref('')
 const steps = ref([])
 const isRunning = ref(false)
+const isGenerating = ref(false)
 const stepsContainer = ref(null)
 
 const agent = new Agent('main-session')
+
+watch(isGenerating, (val) => {
+  if (val) scrollToBottom()
+})
 
 onMounted(async () => {
   await agent.init()
@@ -21,7 +26,8 @@ onMounted(async () => {
   })
 
   agent.onStatus((status) => {
-    isRunning.value = (status === 'running')
+    isRunning.value = (status === 'running' || status === 'thinking')
+    isGenerating.value = (status === 'thinking')
   })
 
   // Reconstruct UI steps from persisted history
@@ -32,7 +38,10 @@ onMounted(async () => {
       if (entry.role === 'user') {
         steps.value.push({ type: STEP_TYPES.USER, content: entry.content, timestamp })
       } else if (entry.role === 'assistant' && entry.tool_calls) {
-        // Assistant message that triggered tool calls — skip in UI (tool_call steps cover it)
+        // Assistant message that triggered tool calls — show content as thought if present
+        if (entry.content) {
+          steps.value.push({ type: STEP_TYPES.THOUGHT, content: entry.content, timestamp })
+        }
         continue
       } else if (entry.role === 'tool' && entry._meta) {
         // Tool result with metadata — show as a combined tool_call step
@@ -45,6 +54,8 @@ onMounted(async () => {
           summary: meta.summary,
           displayLabel: formatToolLabel(meta.toolName, meta.toolArgs),
           collapsed: true,
+          argsCollapsed: true,
+          resultCollapsed: true,
           timestamp,
         })
       } else if (entry.role === 'tool') {
@@ -66,7 +77,12 @@ onMounted(async () => {
  * Enrich a raw step emitted by the agent with parsed data for the UI
  */
 function enrichStep(step) {
-  const enriched = { ...step, collapsed: true }
+  const enriched = { 
+    ...step, 
+    collapsed: true, 
+    argsCollapsed: true, 
+    resultCollapsed: true 
+  }
 
   if (step.type === STEP_TYPES.SUCCESS) {
     enriched.html = parseMarkdown(step.content)
@@ -112,6 +128,14 @@ function toggleCollapse(index) {
   steps.value[index].collapsed = !steps.value[index].collapsed
 }
 
+function toggleArgs(index) {
+  steps.value[index].argsCollapsed = !steps.value[index].argsCollapsed
+}
+
+function toggleResult(index) {
+  steps.value[index].resultCollapsed = !steps.value[index].resultCollapsed
+}
+
 const scrollToBottom = async () => {
   await nextTick()
   if (stepsContainer.value) {
@@ -147,11 +171,64 @@ defineExpose({ clearHistory })
 <template>
   <div class="chat-view">
     <div class="steps-container" ref="stepsContainer">
-      <!-- Empty state -->
-      <div v-if="steps.length === 0" class="empty-state">
-        <div class="prompt-cloud">
-          <img class="task-mascot" src="/icons/icon128.png" alt="Mascot">
-          <div class="prompt-cloud-title">I can read and interact with the current page. <br>Tell me what to do.</div>
+      <!-- Empty state / Showcase -->
+      <div v-if="steps.length === 0" class="showcase">
+        <div class="showcase-header">
+          <h2>Welcome to Copilot Sidebar</h2>
+          <p>I can navigate and interact with any website for you.</p>
+        </div>
+
+        <div class="showcase-demo">
+          <div class="showcase-label">EXAMPLE INTERACTION</div>
+          
+          <div class="step-wrapper user">
+            <div class="step user">
+              <div class="step-content">Find the best selling product on this page.</div>
+            </div>
+          </div>
+
+          <div class="step-wrapper thought">
+            <div class="step thought">
+              <div class="step-icon"><span class="i i-brain"></span></div>
+              <div class="step-content step-inline">Analyzing page structure to identify products...</div>
+            </div>
+          </div>
+
+          <div class="step-wrapper tool_call">
+            <div class="step tool-call">
+              <div class="tool-header">
+                <span class="i i-chevron-right tool-chevron"></span>
+                <span class="i i-wrench tool-icon"></span>
+                <span class="tool-label">read_page(mode="compact")</span>
+              </div>
+              <div class="tool-summary-row">
+                <span class="tool-summary">Extracted 2,450 chars of page text</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="step-wrapper success">
+            <div class="step success">
+              <div class="step-header">
+                <span class="step-time">demo</span>
+                <span class="step-type-label"><b>answer</b></span>
+              </div>
+              <div class="step-content">
+                The best selling product is the **SuperWidget Pro**, currently priced at $49.99.
+              </div>
+            </div>
+          </div>
+
+          <div class="step-wrapper error">
+            <div class="step error">
+              <div class="step-icon"><span class="i i-alert-circle"></span></div>
+              <div class="step-content step-inline">Could not find a "Checkout" button to proceed.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="showcase-footer">
+          Try: "Summarize this page", "Fill this form with dummy data", or "Find the pricing section".
         </div>
       </div>
 
@@ -165,34 +242,42 @@ defineExpose({ clearHistory })
 
         <!-- Thought -->
         <div v-else-if="step.type === 'thought'" class="step thought">
-          <div class="step-icon">💭</div>
+          <div class="step-icon"><span class="i i-brain"></span></div>
           <div class="step-content step-inline">{{ step.content }}</div>
         </div>
 
         <!-- Action -->
         <div v-else-if="step.type === 'action'" class="step action">
-          <div class="step-icon">⚡</div>
+          <div class="step-icon"><span class="i i-zap"></span></div>
           <div class="step-content step-inline">{{ step.content }}</div>
         </div>
 
         <!-- Tool Call (collapsible) — shows args + returned result -->
-        <div v-else-if="step.type === 'tool_call'" class="step tool-call" @click="toggleCollapse(index)">
-          <div class="tool-header">
-            <span class="tool-chevron" :class="{ open: !step.collapsed }">▶</span>
-            <span class="tool-icon">🔧</span>
+        <div v-else-if="step.type === 'tool_call'" class="step tool-call">
+          <div class="tool-header" @click="toggleCollapse(index)">
+            <span class="i i-chevron-right tool-chevron" :class="{ open: !step.collapsed }"></span>
+            <span class="i i-wrench tool-icon"></span>
             <span class="tool-label">{{ step.displayLabel }}</span>
-            <span v-if="step.summary" class="tool-summary">{{ step.summary }}</span>
+          </div>
+          <div v-if="step.summary" class="tool-summary-row" @click="toggleCollapse(index)">
+            <span class="tool-summary">{{ step.summary }}</span>
           </div>
           <div v-if="!step.collapsed" class="tool-detail">
             <!-- Arguments section -->
             <div class="tool-section">
-              <div class="tool-section-title">Arguments</div>
-              <pre>{{ JSON.stringify(step.toolArgs, null, 2) }}</pre>
+              <div class="tool-section-header" @click="toggleArgs(index)">
+                <span class="i i-chevron-right tool-chevron sm" :class="{ open: !step.argsCollapsed }"></span>
+                <span class="tool-section-title">Arguments</span>
+              </div>
+              <pre v-if="!step.argsCollapsed">{{ JSON.stringify(step.toolArgs, null, 2) }}</pre>
             </div>
             <!-- Result section -->
             <div v-if="step.resultData" class="tool-section">
-              <div class="tool-section-title">Result</div>
-              <pre>{{ typeof step.resultData === 'object' ? JSON.stringify(step.resultData, null, 2) : step.resultData }}</pre>
+              <div class="tool-section-header" @click="toggleResult(index)">
+                <span class="i i-chevron-right tool-chevron sm" :class="{ open: !step.resultCollapsed }"></span>
+                <span class="tool-section-title">Result</span>
+              </div>
+              <pre v-if="!step.resultCollapsed">{{ typeof step.resultData === 'object' ? JSON.stringify(step.resultData, null, 2) : step.resultData }}</pre>
             </div>
           </div>
         </div>
@@ -201,7 +286,7 @@ defineExpose({ clearHistory })
         <div v-else-if="step.type === 'success'" class="step success">
           <div class="step-header">
             <span class="step-time">{{ step.timestamp }}</span>
-            <span class="step-type-label">answer</span>
+            <span class="step-type-label"><b>answer</b></span>
           </div>
           <div v-if="step.html" class="step-content markdown-content" v-html="step.html"></div>
           <div v-else class="step-content">{{ step.content }}</div>
@@ -209,8 +294,20 @@ defineExpose({ clearHistory })
 
         <!-- Error -->
         <div v-else-if="step.type === 'error'" class="step error">
-          <div class="step-icon">❌</div>
+          <div class="step-icon"><span class="i i-alert-circle"></span></div>
           <div class="step-content step-inline">{{ step.content }}</div>
+        </div>
+      </div>
+
+      <!-- Thinking Loader -->
+      <div v-if="isGenerating" class="step-wrapper thought">
+        <div class="step thought">
+          <div class="step-icon"><span class="i i-brain"></span></div>
+          <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
       </div>
     </div>
@@ -289,9 +386,65 @@ defineExpose({ clearHistory })
 
 .prompt-cloud-title {
   font-size: 14px;
-  color: rgba(223, 206, 179, 0.55);
+  color: rgba(211, 218, 227, 0.55);
   text-align: center;
   line-height: 1.6;
+}
+
+/* ── Showcase ── */
+.showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px 0;
+  animation: reveal-soft 0.3s ease-out;
+}
+
+.showcase-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.showcase-header h2 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.showcase-header p {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.showcase-demo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  opacity: 0.8;
+}
+
+.showcase-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+
+.showcase-footer {
+  font-size: 12px;
+  color: var(--text2);
+  text-align: center;
+  font-style: italic;
+  padding: 0 20px;
 }
 
 /* ── Step Wrapper ── */
@@ -315,8 +468,8 @@ defineExpose({ clearHistory })
 
 /* ── User ── */
 .step.user {
-  background: rgba(212, 162, 78, 0.12);
-  border: 1px solid rgba(212, 162, 78, 0.2);
+  background: rgba(82, 148, 226, 0.12);
+  border: 1px solid rgba(82, 148, 226, 0.2);
   border-bottom-right-radius: 2px;
   color: var(--text);
   max-width: 80%;
@@ -347,17 +500,16 @@ defineExpose({ clearHistory })
 
 /* ── Tool Call (combined args + result) ── */
 .step.tool-call {
-  background: rgba(223, 206, 179, 0.04);
-  border: 1px solid rgba(223, 206, 179, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   padding: 10px 14px;
-  cursor: pointer;
   max-width: 100%;
   transition: border-color 0.15s;
 }
 
 .step.tool-call:hover {
-  border-color: rgba(223, 206, 179, 0.18);
+  border-color: rgba(124, 129, 140, 0.3);
 }
 
 .tool-header {
@@ -366,12 +518,17 @@ defineExpose({ clearHistory })
   gap: 8px;
   font-size: 13px;
   color: var(--text2);
+  cursor: pointer;
 }
 
 .tool-chevron {
   font-size: 10px;
   transition: transform 0.15s;
-  color: rgba(223, 206, 179, 0.35);
+  color: rgba(211, 218, 227, 0.35);
+  display: inline-block;
+}
+.tool-chevron.sm {
+  font-size: 8px;
 }
 .tool-chevron.open {
   transform: rotate(90deg);
@@ -388,11 +545,17 @@ defineExpose({ clearHistory })
   white-space: nowrap;
 }
 
+.tool-summary-row {
+  margin-top: 2px;
+  margin-left: 18px; /* Align with tool-label */
+  cursor: pointer;
+}
+
 .tool-summary {
   font-size: 11px;
-  color: rgba(110, 148, 96, 0.8);
-  white-space: nowrap;
-  flex-shrink: 0;
+  color: var(--success);
+  font-weight: 500;
+  opacity: 0.9;
 }
 
 .tool-detail {
@@ -403,11 +566,24 @@ defineExpose({ clearHistory })
 }
 
 .tool-section {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
   padding: 10px 12px;
   max-height: 300px;
   overflow: auto;
+}
+
+.tool-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tool-section-header:hover .tool-section-title {
+  color: rgba(211, 218, 227, 0.7);
 }
 
 .tool-section-title {
@@ -415,25 +591,38 @@ defineExpose({ clearHistory })
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: rgba(223, 206, 179, 0.45);
-  margin-bottom: 6px;
+  color: rgba(211, 218, 227, 0.45);
+  margin-bottom: 0; /* Override previous margin */
 }
 
 .tool-section pre {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: rgba(223, 206, 179, 0.7);
+  color: rgba(211, 218, 227, 0.7);
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
+  margin-top: 4px;
 }
 
-/* ── Success / Final Answer ── */
 .step.success {
-  background: rgba(110, 148, 96, 0.08);
+  background: rgba(0, 0, 0, 0.2);
   border-left: 3px solid var(--success);
+  border-radius: 10px;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.markdown-content {
+  min-width: 0;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-content :deep(pre),
+.markdown-content :deep(table) {
+  min-width: 200px;
+  max-width: 100%;
 }
 
 .step-header {
@@ -474,8 +663,8 @@ defineExpose({ clearHistory })
   display: flex;
   gap: 12px;
   align-items: stretch;
-  background: linear-gradient(180deg, #1d1b18 0%, #1a1815 100%);
-  border: 1px solid rgba(223, 206, 179, 0.16);
+  background: #21252b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   padding: 10px 12px 8px;
 }
@@ -490,7 +679,7 @@ textarea {
   background: transparent;
   border: none;
   padding: 6px 10px 0;
-  color: rgba(223, 206, 179, 0.82);
+  color: rgba(211, 218, 227, 0.82);
   font-size: 15px;
   font-family: inherit;
   resize: none;
@@ -499,9 +688,9 @@ textarea {
 }
 
 .send-btn {
-  background: #34312d;
+  background: #4b5162;
   border: none;
-  color: rgba(223, 206, 179, 0.75);
+  color: rgba(211, 218, 227, 0.75);
   width: 38px;
   height: 38px;
   border-radius: 10px;
@@ -515,7 +704,7 @@ textarea {
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #3c3934;
+  background: #5a6078;
   color: var(--text);
 }
 
@@ -532,8 +721,35 @@ textarea {
 .task-footer-note {
   margin-top: 8px;
   font-size: 12px;
-  color: rgba(223, 206, 179, 0.35);
+  color: rgba(211, 218, 227, 0.35);
   text-align: center;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 0;
+  min-height: 20px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  background: var(--text);
+  border-radius: 50%;
+  display: inline-block;
+  opacity: 0.6;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.1);
+  animation: typing 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+.typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+  40% { transform: scale(1.1); opacity: 1; }
 }
 
 @keyframes reveal-soft {

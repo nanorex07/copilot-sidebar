@@ -132,8 +132,8 @@ const saveSettings = async () => {
 }
 
 .provider-card {
-  background: linear-gradient(180deg, #262019 0%, #211b15 100%);
-  border: 1px solid var(--border);
+  background: #21252b;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   padding: 16px;
 }
@@ -153,8 +153,8 @@ const saveSettings = async () => {
 
 .provider-input {
   width: 100%;
-  background: #151311;
-  border: 1px solid #3a3126;
+  background: #1b1e23;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   color: var(--text);
   padding: 10px 12px;
@@ -175,8 +175,8 @@ const saveSettings = async () => {
 }
 
 .save-btn {
-  background: rgba(212, 162, 78, 0.18);
-  border: 1px solid rgba(212, 162, 78, 0.42);
+  background: rgba(82, 148, 226, 0.18);
+  border: 1px solid rgba(82, 148, 226, 0.42);
   color: var(--accent);
   border-radius: 6px;
   padding: 8px 14px;
@@ -189,7 +189,7 @@ const saveSettings = async () => {
 }
 
 .save-btn:hover {
-  background: rgba(212, 162, 78, 0.25);
+  background: rgba(82, 148, 226, 0.25);
   border-color: var(--accent);
 }
 
