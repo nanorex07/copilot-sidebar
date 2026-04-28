@@ -19,14 +19,13 @@ export const DEFAULT_OPENAI_CONFIG = {
 };
 
 // ── Agent Loop Limits ──
-export const AGENT_MAX_STEPS = 25;
+export const AGENT_MAX_STEPS = 50;
 export const AGENT_MAX_TOOL_ERRORS = 5;
 
 // ── Page Extraction ──
-export const PAGE_TEXT_EXTRACTION_THRESHOLD = 8000;
-export const PAGE_TEXT_MAX_CHARS = 15000;
-export const ACCESSIBILITY_TREE_MAX_DEPTH = 15;
-export const ACCESSIBILITY_TREE_MAX_NODES = 500;
+export const PAGE_TEXT_EXTRACTION_THRESHOLD = 20000;
+export const ACCESSIBILITY_TREE_MAX_DEPTH = 20;
+export const ACCESSIBILITY_TREE_MAX_NODES = 2000;
 export const FIND_MAX_RESULTS = 10;
 export const FIND_TEXT_MAX_RESULTS = 20;
 

@@ -10,7 +10,14 @@
  * and are not dispatched to the content script.
  */
 
-import { CONTENT_ACTIONS } from '../config/constants';
+import {
+  CONTENT_ACTIONS,
+  ACCESSIBILITY_TREE_MAX_DEPTH,
+  ACCESSIBILITY_TREE_MAX_NODES,
+  PAGE_TEXT_EXTRACTION_THRESHOLD,
+  FIND_MAX_RESULTS,
+  FIND_TEXT_MAX_RESULTS
+} from '../config/constants';
 
 const TOOL_REGISTRY = {
   // ── Reading Tools ──
@@ -18,8 +25,8 @@ const TOOL_REGISTRY = {
   read_page: {
     contentAction: CONTENT_ACTIONS.READ_PAGE,
     buildPayload: (args) => ({
-      maxDepth: 15,
-      maxNodes: 500,
+      maxDepth: ACCESSIBILITY_TREE_MAX_DEPTH,
+      maxNodes: ACCESSIBILITY_TREE_MAX_NODES,
       viewportOnly: args.mode === 'compact',
     }),
     formatResult: (result) => {
@@ -33,7 +40,7 @@ const TOOL_REGISTRY = {
     buildPayload: (args) => ({
       scope: args.scope || 'full',
       selector: args.selector || '',
-      maxChars: 15000,
+      maxChars: PAGE_TEXT_EXTRACTION_THRESHOLD * 2, // Allow a bit more than threshold
     }),
     formatResult: (result) => {
       const chars = result?.charCount || 0;
@@ -46,6 +53,7 @@ const TOOL_REGISTRY = {
     contentAction: CONTENT_ACTIONS.FIND,
     buildPayload: (args) => ({
       query: args.query,
+      maxResults: FIND_MAX_RESULTS,
     }),
     formatResult: (result) => {
       if (Array.isArray(result)) {
@@ -59,7 +67,7 @@ const TOOL_REGISTRY = {
     contentAction: CONTENT_ACTIONS.FIND_TEXT,
     buildPayload: (args) => ({
       query: args.query,
-      maxResults: 20,
+      maxResults: FIND_TEXT_MAX_RESULTS,
       scrollToFirst: true,
     }),
     formatResult: (result) => {

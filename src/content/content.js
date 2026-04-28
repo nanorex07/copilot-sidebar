@@ -73,7 +73,7 @@
     if (el.getAttribute('role') === 'button' || el.getAttribute('role') === 'link') return true;
     if (el.onclick || el.getAttribute('onclick')) return true;
     if (el.tabIndex >= 0) return true;
-    try { if (getComputedStyle(el).cursor === 'pointer') return true; } catch {}
+    try { if (getComputedStyle(el).cursor === 'pointer') return true; } catch { }
     return false;
   }
 
@@ -313,10 +313,11 @@
 
   // ===== FIND ELEMENT BY DESCRIPTION =====
 
-  function findByDescription(query) {
-    query = String(query || '').toLowerCase().trim();
+  function findByDescription(payload = {}) {
+    const query = String(payload.query || '').toLowerCase().trim();
     if (!query) return [];
     const queryWords = query.split(/\s+/).filter(Boolean);
+    const maxResults = payload.maxResults || 10;
     const candidates = [];
 
     const selector = 'a, button, input, select, textarea, [role="button"], [role="link"], [onclick], [tabindex]';
@@ -358,7 +359,7 @@
     });
 
     candidates.sort((a, b) => b.score - a.score);
-    return candidates.slice(0, 10);
+    return candidates.slice(0, maxResults);
   }
 
   // ===== FIND TEXT ON PAGE =====
@@ -412,7 +413,7 @@
       try {
         const found = window.find(query, false, false, true);
         if (!found) window.getSelection()?.removeAllRanges();
-      } catch {}
+      } catch { }
     }
 
     return {
@@ -501,7 +502,7 @@
           if (form) {
             const submitBtn = form.querySelector('[type="submit"], button:not([type="button"])');
             if (submitBtn) submitBtn.click();
-            else try { form.submit(); } catch {}
+            else try { form.submit(); } catch { }
           }
         }
         return { success: true, description: `Typed "${text}" into [${target}]${params.enter ? ' and pressed Enter' : ''}` };
@@ -547,7 +548,7 @@
           if (form) {
             const submitBtn = form.querySelector('[type="submit"], button:not([type="button"])');
             if (submitBtn) submitBtn.click();
-            else try { form.submit(); } catch {}
+            else try { form.submit(); } catch { }
           }
         }
         return { success: true, description: `Pressed ${params.key}` };
@@ -572,7 +573,7 @@
           sendResponse(getPageText(payload));
           break;
         case 'find':
-          sendResponse(findByDescription(payload?.query));
+          sendResponse(findByDescription(payload));
           break;
         case 'findText':
           sendResponse(findTextOnPage(payload));

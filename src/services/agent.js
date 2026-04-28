@@ -100,7 +100,12 @@ export class Agent {
         } catch (err) {
           errorCount++;
           this._notifyStep(STEP_TYPES.ERROR, `LLM call failed: ${err.message}`);
-          if (errorCount >= AGENT_MAX_TOOL_ERRORS) break;
+          if (errorCount >= AGENT_MAX_TOOL_ERRORS) {
+            this._notifyStep(STEP_TYPES.ERROR, `Reached maximum tool errors (${AGENT_MAX_TOOL_ERRORS}). Task aborted.`);
+            this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
+            await this._persistHistory();
+            break;
+          }
           continue;
         }
 
@@ -247,8 +252,14 @@ export class Agent {
       // Loop ended without done/fail
       if (step >= AGENT_MAX_STEPS && !this._aborted) {
         this._notifyStep(STEP_TYPES.ERROR, `Reached maximum steps (${AGENT_MAX_STEPS}). Task stopped.`);
-        this.history.push({ role: 'assistant', content: 'Task stopped: max steps reached.', timestamp: this._timestamp() });
+        this.history.push({ role: 'assistant', content: `Task stopped: reached maximum steps (${AGENT_MAX_STEPS}).`, timestamp: this._timestamp() });
         await this._persistHistory();
+      } else if (errorCount >= AGENT_MAX_TOOL_ERRORS && !this._aborted) {
+        // Already notified in the loop, but ensure history is consistent
+        if (!this.history[this.history.length - 1].content.includes('Task aborted')) {
+           this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
+           await this._persistHistory();
+        }
       }
 
     } catch (error) {
@@ -287,24 +298,80 @@ export class Agent {
   }
 
   /**
-   * Send a message to the content script in the active tab
+   * Get the active tab ID
    */
-  async _sendToContent(action, payload) {
+  async _getActiveTabId() {
     return new Promise((resolve, reject) => {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (!tabs[0]) {
           reject(new Error('No active tab found.'));
-          return;
+        } else {
+          resolve(tabs[0].id);
         }
-        chrome.tabs.sendMessage(tabs[0].id, { action, payload }, (response) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(response);
-          }
-        });
       });
     });
+  }
+
+  /**
+   * Send a message to the content script in the active tab.
+   * If the content script is not available (page navigated, not yet injected, etc.),
+   * automatically re-injects it and retries once.
+   *
+   * Pattern from reference project: detect "Receiving end does not exist" →
+   * chrome.scripting.executeScript → wait → retry.
+   */
+  async _sendToContent(action, payload) {
+    const tabId = await this._getActiveTabId();
+
+    try {
+      const response = await this._trySendMessage(tabId, action, payload);
+      return response;
+    } catch (err) {
+      const msg = String(err?.message || err);
+      const needsInjection =
+        msg.includes('Receiving end does not exist') ||
+        msg.includes('Could not establish connection');
+
+      if (needsInjection) {
+        console.log('[Agent] Content script not available, re-injecting...');
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content.js'],
+          });
+          // Wait for script to initialize
+          await this._sleep(300);
+          const retryResponse = await this._trySendMessage(tabId, action, payload);
+          return retryResponse;
+        } catch (injectErr) {
+          throw new Error(`Content script injection failed: ${injectErr.message}`);
+        }
+      }
+
+      throw err;
+    }
+  }
+
+  /**
+   * Low-level message send wrapped in a promise.
+   */
+  _trySendMessage(tabId, action, payload) {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, { action, payload }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(response ?? { success: false, error: 'Empty response from content script' });
+        }
+      });
+    });
+  }
+
+  /**
+   * Simple sleep utility
+   */
+  _sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -312,7 +379,10 @@ export class Agent {
    */
   async _getPageContext() {
     try {
-      const result = await this._sendToContent('getPageText', { scope: 'full', maxChars: 8000 });
+      const result = await this._sendToContent('getPageText', { 
+        scope: 'full', 
+        maxChars: PAGE_TEXT_EXTRACTION_THRESHOLD 
+      });
       return {
         url: result?.url || 'N/A',
         title: result?.title || 'N/A',
