@@ -22,7 +22,13 @@ export const DEFAULT_OPENAI_CONFIG = {
 // ── Configuration Keys ──
 export const CONFIG_KEYS = {
   AGENT_LIMITS: 'agent_limits',
-  PAGE_EXTRACTION: 'page_extraction'
+  PAGE_EXTRACTION: 'page_extraction',
+  USER_SETTINGS: 'user_settings'
+};
+
+// ── User Settings ──
+export const DEFAULT_USER_SETTINGS = {
+  customInstructions: ''
 };
 
 // ── Agent Loop Limits ──

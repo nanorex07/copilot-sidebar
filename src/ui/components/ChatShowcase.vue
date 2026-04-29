@@ -2,7 +2,7 @@
 import ChatStep from './ChatStep.vue'
 
 const demoSteps = [
-  { type: 'user', content: 'Find the best selling product on this page.' },
+  { type: 'user', content: 'Find the best selling product on this page.'},
   { type: 'thought', content: 'Analyzing page structure to identify products...', expanded: false },
   { 
     type: 'tool_call', 
@@ -14,16 +14,16 @@ const demoSteps = [
   },
   { 
     type: 'success', 
-    timestamp: 'demo', 
+    timestamp: '10:34 AM', 
     content: 'The best selling product is the **SuperWidget Pro**, currently priced at $49.99.' 
   },
-  { type: 'error', content: 'Could not find a "Checkout" button to proceed.' }
 ]
 </script>
 
 <template>
   <div class="showcase">
     <div class="showcase-header">
+      <img src="/icons/icon128.png" alt="Copilot" class="showcase-icon" />
       <h2>Welcome to Copilot Sidebar</h2>
       <p>I can navigate and interact with any website for you.</p>
     </div>
@@ -61,6 +61,12 @@ const demoSteps = [
   text-align: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+.showcase-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 8px;
+  opacity: 0.9;
 }
 
 .showcase-header h2 {

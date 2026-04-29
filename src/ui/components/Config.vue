@@ -1,21 +1,25 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { configService } from '../../services/config';
-import { DEFAULT_AGENT_LIMITS, DEFAULT_PAGE_EXTRACTION, CONFIG_KEYS } from '../../config/constants';
+import { DEFAULT_AGENT_LIMITS, DEFAULT_PAGE_EXTRACTION, DEFAULT_USER_SETTINGS, CONFIG_KEYS } from '../../config/constants';
 
 const limits = ref({});
 const extraction = ref({});
+const userSettings = ref({});
 
 const limitsOpen = ref(true);
 const extractionOpen = ref(true);
+const userOpen = ref(true);
 
 const saveLimitsStatus = ref('');
 const saveExtractionStatus = ref('');
+const saveUserStatus = ref('');
 
 onMounted(async () => {
   await configService.init();
   limits.value = { ...configService.get(CONFIG_KEYS.AGENT_LIMITS) };
   extraction.value = { ...configService.get(CONFIG_KEYS.PAGE_EXTRACTION) };
+  userSettings.value = { ...configService.get(CONFIG_KEYS.USER_SETTINGS) };
 });
 
 const validateInput = (val) => {
@@ -59,6 +63,17 @@ const restoreExtraction = async () => {
   extraction.value = { ...DEFAULT_PAGE_EXTRACTION };
   await saveExtraction();
 };
+
+const saveUser = async () => {
+  await configService.save(CONFIG_KEYS.USER_SETTINGS, userSettings.value);
+  saveUserStatus.value = 'Saved successfully!';
+  setTimeout(() => saveUserStatus.value = '', 2000);
+};
+
+const restoreUser = async () => {
+  userSettings.value = { ...DEFAULT_USER_SETTINGS };
+  await saveUser();
+};
 </script>
 
 <template>
@@ -67,6 +82,39 @@ const restoreExtraction = async () => {
       <div class="settings-intro">
         Manage advanced Agent logic constraints and page extraction thresholds.
       </div>
+
+      <!-- User Settings Section -->
+      <div class="settings-section">
+        <div class="section-header collapsible" @click="userOpen = !userOpen">
+          <span class="i i-user"></span>
+          <span class="section-title">USER SETTINGS</span>
+          <span class="i i-chevron-right chevron" :class="{ open: userOpen }"></span>
+        </div>
+
+        <div v-show="userOpen" class="provider-card">
+          <div class="input-group">
+            <label class="input-label">Custom Instructions</label>
+            <textarea 
+              v-model="userSettings.customInstructions" 
+              class="provider-input provider-textarea" 
+              placeholder="E.g. Always explain code concisely, or prefer using the scroll tool before clicking..."
+              rows="4"
+            ></textarea>
+          </div>
+
+          <div class="provider-actions">
+            <button class="save-btn" @click="saveUser">
+              <span class="i i-save"></span>
+              <span>Save</span>
+            </button>
+            <button class="default-btn" @click="restoreUser">
+              Restore Defaults
+            </button>
+            <span v-if="saveUserStatus" class="status-msg" :class="{ success: saveUserStatus.includes('Saved'), error: !saveUserStatus.includes('Saved') }">{{ saveUserStatus }}</span>
+          </div>
+        </div>
+      </div>
+
 
       <!-- Agent Loop Limits Section -->
       <div class="settings-section">
@@ -214,6 +262,11 @@ const restoreExtraction = async () => {
 }
 .provider-input:focus {
   border-color: var(--accent);
+}
+.provider-textarea {
+  min-height: 100px;
+  resize: vertical;
+  line-height: 1.6;
 }
 .provider-actions {
   display: flex;

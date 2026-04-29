@@ -7,6 +7,7 @@ import { configService } from './config';
 import {
    LLM_PROVIDERS,
    STEP_TYPES,
+   CONFIG_KEYS,
 } from '../config/constants';
 
 /**
@@ -57,8 +58,18 @@ export class Agent {
 
       try {
          const provider = await this._getProvider();
+
+         // Augment system prompt with user custom instructions
+         const userSettings = configService.get(CONFIG_KEYS.USER_SETTINGS) || {};
+         const customInstructions = userSettings.customInstructions || '';
+
+         let systemPrompt = SYSTEM_PROMPT;
+         if (customInstructions) {
+            systemPrompt += `\n\nUSER CUSTOM INSTRUCTIONS:\n${customInstructions}`;
+         }
+         console.log(systemPrompt);
          const messages = [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemPrompt },
             ...this._buildLLMMessages(),
             { role: 'user', content: goal }
          ];

@@ -2,6 +2,19 @@
 
 A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can observe the webpage, reason about your goals, and interact with elements directly to perform complex tasks on your behalf.
 
+![Copilot Sidebar](screenshot.png)
+
+---
+
+## ✨ Features
+
+- **Autonomous Loop**: Observe → Think → Act cycle powered by LLM reasoning.
+- **Rich Interaction**: Full control over DOM (Click, Type, Scroll, Select, Hover).
+- **Accessibility Aware**: Uses the Accessibility Tree for precise element targeting.
+- **Custom Instructions**: Provide global context or specific behavioral guidelines that persist across all tasks.
+- **Persistence**: Full conversation history saved locally via IndexedDB.
+- **Privacy First**: Local storage for keys and history; no external analytics.
+
 ---
 
 ## 🚀 Getting Started
@@ -155,6 +168,7 @@ The **Config** panel allows fine-tuning the agent's behavior:
 | | `ACCESSIBILITY_TREE_MAX_NODES` | Maximum nodes to include in the observation context. |
 | **Search** | `FIND_MAX_RESULTS` | Number of elements returned when using the `find` tool. |
 | | `FIND_TEXT_MAX_RESULTS` | Number of text snippets returned when using `find_text`. |
+| **User Settings** | `customInstructions` | Global guidelines injected into the system prompt for every task. |
 
 ---
 

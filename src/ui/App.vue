@@ -42,7 +42,7 @@ const handleClearHistory = () => {
 <template>
   <div class="header">
     <h1>
-      <img src="/favicon.svg" alt="Logo" class="app-logo" />
+      <img src="/icons/icon128.png" alt="Logo" class="app-logo" />
       {{ APP_NAME }}
       <span class="app-version">v{{ APP_VERSION }}</span>
     </h1>

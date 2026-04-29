@@ -1,5 +1,5 @@
 import { settingsStore } from './storage';
-import { CONFIG_KEYS, DEFAULT_AGENT_LIMITS, DEFAULT_PAGE_EXTRACTION } from '../config/constants';
+import { CONFIG_KEYS, DEFAULT_AGENT_LIMITS, DEFAULT_PAGE_EXTRACTION, DEFAULT_USER_SETTINGS } from '../config/constants';
 
 /**
  * ConfigService — In-memory cache for dynamic application configuration.
@@ -14,7 +14,8 @@ class ConfigService {
     this._initialised = false;
     this.config = {
       [CONFIG_KEYS.AGENT_LIMITS]: { ...DEFAULT_AGENT_LIMITS },
-      [CONFIG_KEYS.PAGE_EXTRACTION]: { ...DEFAULT_PAGE_EXTRACTION }
+      [CONFIG_KEYS.PAGE_EXTRACTION]: { ...DEFAULT_PAGE_EXTRACTION },
+      [CONFIG_KEYS.USER_SETTINGS]: { ...DEFAULT_USER_SETTINGS }
     };
   }
 
@@ -26,6 +27,9 @@ class ConfigService {
 
     const extraction = await settingsStore.getConfig(CONFIG_KEYS.PAGE_EXTRACTION);
     if (extraction) this.config[CONFIG_KEYS.PAGE_EXTRACTION] = { ...this.config[CONFIG_KEYS.PAGE_EXTRACTION], ...extraction };
+
+    const user = await settingsStore.getConfig(CONFIG_KEYS.USER_SETTINGS);
+    if (user) this.config[CONFIG_KEYS.USER_SETTINGS] = { ...this.config[CONFIG_KEYS.USER_SETTINGS], ...user };
 
     this._initialised = true;
   }
