@@ -1,5 +1,5 @@
 <script setup>
-import { defineProps, defineEmits } from 'vue'
+import { defineProps, defineEmits, ref } from 'vue'
 
 const props = defineProps({
   step: Object,
@@ -7,6 +7,20 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['toggleThought', 'toggleCollapse', 'toggleArgs', 'toggleResult'])
+
+const copied = ref(false)
+
+const handleCopy = async () => {
+  try {
+    await navigator.clipboard.writeText(props.step.content)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy text: ', err)
+  }
+}
 </script>
 
 <template>
@@ -59,8 +73,14 @@ const emit = defineEmits(['toggleThought', 'toggleCollapse', 'toggleArgs', 'togg
     <!-- Success -->
     <div v-else-if="step.type === 'success'" class="step success">
       <div class="step-header">
-        <span class="step-time">{{ step.timestamp }}</span>
-        <span class="step-type-label"><b>answer</b></span>
+        <div class="step-header-left">
+          <span class="step-time">{{ step.timestamp }}</span>
+          <span class="step-type-label"><b>answer</b></span>
+        </div>
+        <button class="copy-btn" @click="handleCopy" :title="copied ? 'Copied!' : 'Copy to clipboard'">
+          <span class="i" :class="copied ? 'i-check' : 'i-copy'"></span>
+          <span class="copy-text">{{ copied ? 'Copied' : 'Copy' }}</span>
+        </button>
       </div>
       <div v-if="step.html" class="step-content markdown-content" v-html="step.html"></div>
       <div v-else class="step-content">{{ step.content }}</div>
@@ -269,12 +289,53 @@ const emit = defineEmits(['toggleThought', 'toggleCollapse', 'toggleArgs', 'togg
 .step-header {
   font-size: 11px;
   color: var(--text2);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 1px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.step-header-left {
+  display: flex;
   gap: 12px;
+  align-items: center;
+}
+
+.copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+  opacity: 0.6;
+}
+
+.copy-text {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  opacity: 1;
+}
+
+.copy-btn .i {
+  font-size: 12px;
+}
+
+.copy-btn .i-check {
+  color: var(--success);
 }
 
 .step-content {

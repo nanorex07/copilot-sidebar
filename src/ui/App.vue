@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import Chat from './components/Chat.vue'
 import Settings from './components/Settings.vue'
 import Config from './components/Config.vue'
@@ -7,6 +7,26 @@ import { APP_NAME, APP_VERSION } from '../config/constants'
 
 const currentView = ref('chat')
 const chatRef = ref(null)
+let backgroundPort = null
+
+onMounted(() => {
+  // Establish a persistent connection to the background script
+  // This triggers the keep-alive system to prevent Service Worker termination
+  try {
+    backgroundPort = chrome.runtime.connect({ name: 'sidebar' })
+    backgroundPort.onDisconnect.addListener(() => {
+      console.log('[sidebar] Disconnected from background')
+    })
+  } catch (err) {
+    console.warn('[sidebar] Failed to connect to background:', err)
+  }
+})
+
+onUnmounted(() => {
+  if (backgroundPort) {
+    backgroundPort.disconnect()
+  }
+})
 
 const setView = (view) => {
   currentView.value = view

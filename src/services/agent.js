@@ -1,6 +1,6 @@
 import { historyStore, settingsStore } from './storage';
 import { createLLMProvider } from './llm';
-import { SYSTEM_PROMPT } from '../ui/prompts/system';
+import { SYSTEM_PROMPT } from '../config/prompts';
 import { TOOLS } from '../tools/definitions';
 import { getToolHandler, TERMINAL_TOOLS } from '../tools/registry';
 import { configService } from './config';
