@@ -2,7 +2,7 @@
 
 A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can observe the webpage, reason about your goals, and interact with elements directly to perform complex tasks on your behalf.
 
-![Copilot Sidebar](public/screenshot.png)
+![Screenshot](public/screenshot.png)
 
 ---
 
