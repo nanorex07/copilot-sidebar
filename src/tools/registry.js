@@ -11,24 +11,23 @@
  */
 
 import {
-  CONTENT_ACTIONS,
-  ACCESSIBILITY_TREE_MAX_DEPTH,
-  ACCESSIBILITY_TREE_MAX_NODES,
-  PAGE_TEXT_EXTRACTION_THRESHOLD,
-  FIND_MAX_RESULTS,
-  FIND_TEXT_MAX_RESULTS
+  CONTENT_ACTIONS
 } from '../config/constants';
+import { configService } from '../services/config';
 
 const TOOL_REGISTRY = {
   // ── Reading Tools ──
 
   read_page: {
     contentAction: CONTENT_ACTIONS.READ_PAGE,
-    buildPayload: (args) => ({
-      maxDepth: ACCESSIBILITY_TREE_MAX_DEPTH,
-      maxNodes: ACCESSIBILITY_TREE_MAX_NODES,
-      viewportOnly: args.mode === 'compact',
-    }),
+    buildPayload: (args) => {
+      const config = configService.get('page_extraction');
+      return {
+        maxDepth: config.ACCESSIBILITY_TREE_MAX_DEPTH,
+        maxNodes: config.ACCESSIBILITY_TREE_MAX_NODES,
+        viewportOnly: args.mode === 'compact',
+      };
+    },
     formatResult: (result) => {
       const count = result?.interactiveCount || 0;
       return `Found ${count} interactive elements on the page.`;
@@ -37,11 +36,14 @@ const TOOL_REGISTRY = {
 
   get_page_text: {
     contentAction: CONTENT_ACTIONS.GET_PAGE_TEXT,
-    buildPayload: (args) => ({
-      scope: args.scope || 'full',
-      selector: args.selector || '',
-      maxChars: PAGE_TEXT_EXTRACTION_THRESHOLD * 2, // Allow a bit more than threshold
-    }),
+    buildPayload: (args) => {
+      const config = configService.get('page_extraction');
+      return {
+        scope: args.scope || 'full',
+        selector: args.selector || '',
+        maxChars: config.PAGE_TEXT_EXTRACTION_THRESHOLD * 2, // Allow a bit more than threshold
+      };
+    },
     formatResult: (result) => {
       const chars = result?.charCount || 0;
       const truncated = result?.truncated ? ' (truncated)' : '';
@@ -51,10 +53,13 @@ const TOOL_REGISTRY = {
 
   find: {
     contentAction: CONTENT_ACTIONS.FIND,
-    buildPayload: (args) => ({
-      query: args.query,
-      maxResults: FIND_MAX_RESULTS,
-    }),
+    buildPayload: (args) => {
+      const config = configService.get('page_extraction');
+      return {
+        query: args.query,
+        maxResults: config.FIND_MAX_RESULTS,
+      };
+    },
     formatResult: (result) => {
       if (Array.isArray(result)) {
         return `Found ${result.length} matching elements.`;
@@ -65,11 +70,14 @@ const TOOL_REGISTRY = {
 
   find_text: {
     contentAction: CONTENT_ACTIONS.FIND_TEXT,
-    buildPayload: (args) => ({
-      query: args.query,
-      maxResults: FIND_TEXT_MAX_RESULTS,
-      scrollToFirst: true,
-    }),
+    buildPayload: (args) => {
+      const config = configService.get('page_extraction');
+      return {
+        query: args.query,
+        maxResults: config.FIND_TEXT_MAX_RESULTS,
+        scrollToFirst: true,
+      };
+    },
     formatResult: (result) => {
       const count = result?.count || 0;
       return `Found ${count} text matches for "${result?.query || ''}".`;

@@ -16,19 +16,29 @@ export const LLM_PROVIDERS = {
 export const DEFAULT_OPENAI_CONFIG = {
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o',
-  temperature: 0.2
+  temperature: 0.5
+};
+
+// ── Configuration Keys ──
+export const CONFIG_KEYS = {
+  AGENT_LIMITS: 'agent_limits',
+  PAGE_EXTRACTION: 'page_extraction'
 };
 
 // ── Agent Loop Limits ──
-export const AGENT_MAX_STEPS = 50;
-export const AGENT_MAX_TOOL_ERRORS = 5;
+export const DEFAULT_AGENT_LIMITS = {
+  AGENT_MAX_STEPS: 50,
+  AGENT_MAX_TOOL_ERRORS: 5
+};
 
 // ── Page Extraction ──
-export const PAGE_TEXT_EXTRACTION_THRESHOLD = 20000;
-export const ACCESSIBILITY_TREE_MAX_DEPTH = 20;
-export const ACCESSIBILITY_TREE_MAX_NODES = 2000;
-export const FIND_MAX_RESULTS = 10;
-export const FIND_TEXT_MAX_RESULTS = 20;
+export const DEFAULT_PAGE_EXTRACTION = {
+  PAGE_TEXT_EXTRACTION_THRESHOLD: 20000,
+  ACCESSIBILITY_TREE_MAX_DEPTH: 20,
+  ACCESSIBILITY_TREE_MAX_NODES: 2000,
+  FIND_MAX_RESULTS: 10,
+  FIND_TEXT_MAX_RESULTS: 20
+};
 
 // ── UI Step Types ──
 export const STEP_TYPES = {

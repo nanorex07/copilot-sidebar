@@ -1,15 +1,13 @@
 import { storage } from './storage';
 import { createLLMProvider } from './llm';
-import { SYSTEM_PROMPT } from '../sidepanel/prompts/system';
+import { SYSTEM_PROMPT } from '../ui/prompts/system';
 import { TOOLS } from '../tools/definitions';
 import { getToolHandler, TERMINAL_TOOLS } from '../tools/registry';
+import { configService } from './config';
 import {
    LLM_PROVIDERS,
    STEP_TYPES,
-   PAGE_TEXT_EXTRACTION_THRESHOLD,
    STORAGE_STORES,
-   AGENT_MAX_STEPS,
-   AGENT_MAX_TOOL_ERRORS,
 } from '../config/constants';
 
 /**
@@ -33,6 +31,7 @@ export class Agent {
    }
 
    async init() {
+      await configService.init();
       const savedHistory = await storage.get(STORAGE_STORES.HISTORY, this.sessionId);
       if (savedHistory) {
          this.history = savedHistory;
@@ -69,6 +68,9 @@ export class Agent {
 
          let step = 0;
          let errorCount = 0;
+         const agentLimits = configService.get('agent_limits');
+         const AGENT_MAX_STEPS = agentLimits.AGENT_MAX_STEPS;
+         const AGENT_MAX_TOOL_ERRORS = agentLimits.AGENT_MAX_TOOL_ERRORS;
 
          while (step < AGENT_MAX_STEPS && errorCount < AGENT_MAX_TOOL_ERRORS && !this._aborted) {
             step++;
@@ -107,7 +109,7 @@ export class Agent {
             if (taskFinished) break;
          }
 
-         this._handleLoopEnd(step, errorCount);
+         this._handleLoopEnd(step, errorCount, AGENT_MAX_STEPS, AGENT_MAX_TOOL_ERRORS);
       } catch (error) {
          this._notifyStep(STEP_TYPES.ERROR, error.message);
          console.error('[Agent Error]', error);
@@ -258,13 +260,13 @@ export class Agent {
       this._notifyStep(STEP_TYPES.TOOL_CALL, JSON.stringify({ tool: toolName, args: toolArgs, result, summary }));
    }
 
-   _handleLoopEnd(step, errorCount) {
-      if (step >= AGENT_MAX_STEPS && !this._aborted) {
-         this._notifyStep(STEP_TYPES.ERROR, `Reached maximum steps (${AGENT_MAX_STEPS}). Task stopped.`);
-         this.history.push({ role: 'assistant', content: `Task stopped: reached maximum steps (${AGENT_MAX_STEPS}).`, timestamp: this._timestamp() });
+   _handleLoopEnd(step, errorCount, maxSteps, maxErrors) {
+      if (step >= maxSteps && !this._aborted) {
+         this._notifyStep(STEP_TYPES.ERROR, `Reached maximum steps (${maxSteps}). Task stopped.`);
+         this.history.push({ role: 'assistant', content: `Task stopped: reached maximum steps (${maxSteps}).`, timestamp: this._timestamp() });
          this._persistHistory();
-      } else if (errorCount >= AGENT_MAX_TOOL_ERRORS && !this._aborted) {
-         this._notifyStep(STEP_TYPES.ERROR, `Reached maximum tool errors (${AGENT_MAX_TOOL_ERRORS}). Task aborted.`);
+      } else if (errorCount >= maxErrors && !this._aborted) {
+         this._notifyStep(STEP_TYPES.ERROR, `Reached maximum tool errors (${maxErrors}). Task aborted.`);
          this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
          this._persistHistory();
       }
@@ -380,7 +382,7 @@ export class Agent {
       try {
          const result = await this._sendToContent('getPageText', {
             scope: 'full',
-            maxChars: PAGE_TEXT_EXTRACTION_THRESHOLD
+            maxChars: configService.get('page_extraction').PAGE_TEXT_EXTRACTION_THRESHOLD
          });
          return {
             url: result?.url || 'N/A',

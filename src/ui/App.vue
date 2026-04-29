@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import Chat from './components/Chat.vue'
 import Settings from './components/Settings.vue'
+import Config from './components/Config.vue'
 import { APP_NAME, APP_VERSION } from '../config/constants'
 
 const currentView = ref('chat')
@@ -33,10 +34,10 @@ const handleClearHistory = () => {
         class="tab-item" 
         :class="{ active: currentView === 'chat' }" 
         @click="setView('chat')"
-        title="Task"
+        title="Ask"
       >
         <span class="i i-message-square tab-icon"></span>
-        <span>Task</span>
+        <span>Ask</span>
       </div>
 
       <div 
@@ -47,6 +48,16 @@ const handleClearHistory = () => {
       >
         <span class="i i-sun tab-icon"></span>
         <span>Settings</span>
+      </div>
+
+      <div 
+        class="tab-item" 
+        :class="{ active: currentView === 'config' }" 
+        @click="setView('config')"
+        title="Config"
+      >
+        <span class="i i-cpu tab-icon"></span>
+        <span>Config</span>
       </div>
     </div>
     
@@ -66,6 +77,7 @@ const handleClearHistory = () => {
   <div class="view-container">
     <Chat v-show="currentView === 'chat'" ref="chatRef" />
     <Settings v-show="currentView === 'settings'" />
+    <Config v-show="currentView === 'config'" />
   </div>
 </template>
 
