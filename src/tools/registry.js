@@ -198,10 +198,3 @@ export const TERMINAL_TOOLS = new Set(['done', 'fail']);
 export function getToolHandler(toolName) {
   return TOOL_REGISTRY[toolName] || null;
 }
-
-/**
- * Check if a tool name is valid (either registered or terminal)
- */
-export function isValidTool(toolName) {
-  return toolName in TOOL_REGISTRY || TERMINAL_TOOLS.has(toolName);
-}

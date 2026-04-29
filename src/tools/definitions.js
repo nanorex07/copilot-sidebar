@@ -330,10 +330,3 @@ export const TOOLS = [
     },
   },
 ];
-
-/**
- * Lookup a tool definition by name
- */
-export function getToolByName(name) {
-  return TOOLS.find((t) => t.function.name === name);
-}

@@ -45,18 +45,9 @@ export const STEP_TYPES = {
   THOUGHT: 'thought',
   ACTION: 'action',
   TOOL_CALL: 'tool_call',
-  TOOL_RESULT: 'tool_result',
   ERROR: 'error',
   SUCCESS: 'success',
   USER: 'user'
-};
-
-// ── UI Status ──
-export const UI_STATUS = {
-  IDLE: 'idle',
-  RUNNING: 'running',
-  ERROR: 'error',
-  SUCCESS: 'success'
 };
 
 // ── Content Script Message Types ──

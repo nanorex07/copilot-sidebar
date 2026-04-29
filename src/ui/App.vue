@@ -22,7 +22,7 @@ const handleClearHistory = () => {
 <template>
   <div class="header">
     <h1>
-      <span class="dot" :class="{ running: currentView === 'chat' }"></span>
+      <img src="/favicon.svg" alt="Logo" class="app-logo" />
       {{ APP_NAME }}
       <span class="app-version">v{{ APP_VERSION }}</span>
     </h1>
@@ -108,22 +108,10 @@ const handleClearHistory = () => {
   color: var(--text2);
 }
 
-.header .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text2);
-  transition: background 0.3s;
-}
-
-.header .dot.running {
-  background: var(--success);
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+.header .app-logo {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
 .tab-nav {

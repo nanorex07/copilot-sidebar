@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick, defineExpose, watch } from 'vue'
 import { Agent } from '../../services/agent'
-import { parseMarkdown } from '../../services/markdown'
+import { parseMarkdown } from '../../utils/markdown'
 import { STEP_TYPES } from '../../config/constants'
 
 import ChatShowcase from './ChatShowcase.vue'

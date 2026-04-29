@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { storage } from '../../services/storage'
-import { LLM_PROVIDERS, DEFAULT_OPENAI_CONFIG, STORAGE_STORES } from '../../config/constants'
+import { settingsStore } from '../../services/storage'
+import { LLM_PROVIDERS, DEFAULT_OPENAI_CONFIG } from '../../config/constants'
 
 const apiKey = ref('')
 const baseUrl = ref('')
@@ -9,14 +9,14 @@ const model = ref('')
 const saveStatus = ref('')
 
 onMounted(async () => {
-  const config = await storage.get(STORAGE_STORES.SETTINGS, LLM_PROVIDERS.OPENAI) || {}
+  const config = await settingsStore.getConfig(LLM_PROVIDERS.OPENAI) || {}
   apiKey.value = config.apiKey || ''
   baseUrl.value = config.baseUrl || DEFAULT_OPENAI_CONFIG.baseUrl
   model.value = config.model || DEFAULT_OPENAI_CONFIG.model
 })
 
 const saveSettings = async () => {
-  await storage.set(STORAGE_STORES.SETTINGS, LLM_PROVIDERS.OPENAI, {
+  await settingsStore.saveConfig(LLM_PROVIDERS.OPENAI, {
     apiKey: apiKey.value,
     baseUrl: baseUrl.value,
     model: model.value

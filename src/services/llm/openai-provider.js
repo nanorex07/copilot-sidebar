@@ -1,11 +1,14 @@
 import OpenAI from 'openai';
-import { BaseProvider } from './base-provider';
+import { LLMProvider } from './base-provider';
 import { DEFAULT_OPENAI_CONFIG } from '../../config/constants';
 
 /**
- * OpenAI Provider — supports both plain chat and tool/function calling.
+ * OpenAIProvider — Concrete Strategy for OpenAI-compatible chat completions.
+ *
+ * Supports tool/function calling via the OpenAI SDK.
+ * Config shape: { apiKey, baseUrl?, model?, temperature? }
  */
-export class OpenAIProvider extends BaseProvider {
+export class OpenAIProvider extends LLMProvider {
   constructor(config) {
     super(config);
     this.client = new OpenAI({
@@ -14,16 +17,14 @@ export class OpenAIProvider extends BaseProvider {
       dangerouslyAllowBrowser: true,
     });
   }
+
   /**
-   * Chat completion with tool/function calling support.
-   * Returns the raw message object including tool_calls.
-   *
-   * @param {Array} messages - OpenAI messages array
-   * @param {Array} tools - OpenAI tool definitions
+   * Execute the chat completion via OpenAI SDK.
+   * @param {Array} messages
+   * @param {Array} tools
    * @returns {{ message: object, usage: object }}
    */
-  async chat(messages, tools) {
-    this.validateConfig();
+  async _execute(messages, tools) {
     const response = await this.client.chat.completions.create({
       model: this.config.model || DEFAULT_OPENAI_CONFIG.model,
       temperature: this.config.temperature !== undefined ? this.config.temperature : DEFAULT_OPENAI_CONFIG.temperature,

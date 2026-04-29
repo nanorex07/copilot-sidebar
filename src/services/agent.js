@@ -1,4 +1,4 @@
-import { storage } from './storage';
+import { historyStore, settingsStore } from './storage';
 import { createLLMProvider } from './llm';
 import { SYSTEM_PROMPT } from '../ui/prompts/system';
 import { TOOLS } from '../tools/definitions';
@@ -7,7 +7,6 @@ import { configService } from './config';
 import {
    LLM_PROVIDERS,
    STEP_TYPES,
-   STORAGE_STORES,
 } from '../config/constants';
 
 /**
@@ -32,8 +31,8 @@ export class Agent {
 
    async init() {
       await configService.init();
-      const savedHistory = await storage.get(STORAGE_STORES.HISTORY, this.sessionId);
-      if (savedHistory) {
+      const savedHistory = await historyStore.getSession(this.sessionId);
+      if (savedHistory.length > 0) {
          this.history = savedHistory;
       }
    }
@@ -120,7 +119,7 @@ export class Agent {
    }
 
    async _getProvider() {
-      const config = await storage.get(STORAGE_STORES.SETTINGS, LLM_PROVIDERS.OPENAI);
+      const config = await settingsStore.getConfig(LLM_PROVIDERS.OPENAI);
       return createLLMProvider(LLM_PROVIDERS.OPENAI, config);
    }
 
@@ -404,11 +403,11 @@ export class Agent {
 
    async clearHistory() {
       this.history = [];
-      await storage.remove(STORAGE_STORES.HISTORY, this.sessionId);
+      await historyStore.clearSession(this.sessionId);
    }
 
    async _persistHistory() {
-      await storage.set(STORAGE_STORES.HISTORY, this.sessionId, this.history);
+      await historyStore.saveSession(this.sessionId, this.history);
    }
 
    _timestamp() {
