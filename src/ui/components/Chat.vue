@@ -39,6 +39,8 @@ onMounted(async () => {
     for (const entry of agent.history) {
       const timestamp = entry.timestamp || '-'
 
+      if (entry._isSummary) continue;
+
       if (entry.role === 'user') {
         steps.value.push({ type: STEP_TYPES.USER, content: entry.content, timestamp })
       } else if (entry.role === 'assistant' && entry.tool_calls) {

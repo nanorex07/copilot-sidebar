@@ -34,7 +34,8 @@ export const DEFAULT_USER_SETTINGS = {
 // ── Agent Loop Limits ──
 export const DEFAULT_AGENT_LIMITS = {
   AGENT_MAX_STEPS: 50,
-  AGENT_MAX_TOOL_ERRORS: 5
+  AGENT_MAX_TOOL_ERRORS: 5,
+  TRIGGER_CONTEXT_SUMMARIZE_AFTER: 100
 };
 
 // ── Page Extraction ──

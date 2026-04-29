@@ -82,13 +82,6 @@ const saveSettings = async () => {
         </div>
       </div>
     </div>
-
-    <div class="view-footer">
-      <div class="capability-badge">
-        <span class="i i-shield"></span>
-        <span>INDEXED DB STORAGE</span>
-      </div>
-    </div>
   </div>
 </template>
 

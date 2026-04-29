@@ -1,29 +1,19 @@
-import { historyStore, settingsStore } from './storage';
+import { settingsStore } from './storage';
 import { createLLMProvider } from './llm';
 import { SYSTEM_PROMPT } from '../config/prompts';
 import { TOOLS } from '../tools/definitions';
-import { getToolHandler, TERMINAL_TOOLS } from '../tools/registry';
 import { configService } from './config';
-import {
-   LLM_PROVIDERS,
-   STEP_TYPES,
-   CONFIG_KEYS,
-} from '../config/constants';
+import { LLM_PROVIDERS, STEP_TYPES, CONFIG_KEYS } from '../config/constants';
+import { AgentContext } from './agent/AgentContext';
+import { AgentTools } from './agent/AgentTools';
 
 /**
  * Agent Class — Orchestrates the observe → think → act loop.
- *
- * Flow:
- *   1. User sends a goal
- *   2. Agent gathers page context
- *   3. Agent calls LLM with tools
- *   4. If LLM returns tool_calls → execute them → feed results back → loop
- *   5. If LLM returns text content (or calls done/fail) → stop
  */
 export class Agent {
    constructor(sessionId = 'default') {
       this.sessionId = sessionId;
-      this.history = [];
+      this.context = new AgentContext(sessionId);
       this.status = 'idle';
       this._onStep = null;
       this._onStatus = null;
@@ -32,25 +22,21 @@ export class Agent {
 
    async init() {
       await configService.init();
-      const savedHistory = await historyStore.getSession(this.sessionId);
-      if (savedHistory.length > 0) {
-         this.history = savedHistory;
-      }
+      await this.context.init();
+   }
+
+   // For backward compatibility with UI components that read history directly
+   get history() {
+      return this.context.history;
    }
 
    onStep(callback) { this._onStep = callback; }
    onStatus(callback) { this._onStatus = callback; }
 
-   /**
-    * Abort the current agent loop
-    */
    abort() {
       this._aborted = true;
    }
 
-   /**
-    * Main entry point — run the agent loop for a goal.
-    */
    async run(goal) {
       this.status = 'thinking';
       this._aborted = false;
@@ -59,39 +45,55 @@ export class Agent {
       try {
          const provider = await this._getProvider();
 
-         // Augment system prompt with user custom instructions
-         const userSettings = configService.get(CONFIG_KEYS.USER_SETTINGS) || {};
-         const customInstructions = userSettings.customInstructions || '';
+         let systemPrompt = await this._getBaseSystemPrompt();
 
-         let systemPrompt = SYSTEM_PROMPT;
-         if (customInstructions) {
-            systemPrompt += `\n\nUSER CUSTOM INSTRUCTIONS:\n${customInstructions}`;
+         // Check if we need to summarize before starting new goal
+         await this._checkSummarization(provider, systemPrompt);
+         if (this._aborted) {
+            this.status = 'idle';
+            this._notifyStatus();
+            return;
          }
-         console.log(systemPrompt);
+
          const messages = [
             { role: 'system', content: systemPrompt },
-            ...this._buildLLMMessages(),
+            ...this.context.buildLLMMessages(),
             { role: 'user', content: goal }
          ];
 
-         this.history.push({ role: 'user', content: goal, timestamp: this._timestamp() });
+         this.context.addEntry({ role: 'user', content: goal, timestamp: this._timestamp() });
 
          let step = 0;
          let errorCount = 0;
-         const agentLimits = configService.get('agent_limits');
+         const agentLimits = configService.get(CONFIG_KEYS.AGENT_LIMITS);
          const AGENT_MAX_STEPS = agentLimits.AGENT_MAX_STEPS;
          const AGENT_MAX_TOOL_ERRORS = agentLimits.AGENT_MAX_TOOL_ERRORS;
+         const agentTools = new AgentTools(this.context, this._notifyStep.bind(this));
+
+         const contentActionSender = this._sendToContent.bind(this);
 
          while (step < AGENT_MAX_STEPS && errorCount < AGENT_MAX_TOOL_ERRORS && !this._aborted) {
             step++;
 
-            const response = await this._callLLM(provider, messages);
+            systemPrompt = await this._getBaseSystemPrompt();
+
+            // Check summarization mid-loop if history gets too long
+            await this._checkSummarization(provider, systemPrompt);
+            if (this._aborted) break;
+
+            // Rebuild messages in case summary happened
+            const currentMessages = [
+               { role: 'system', content: systemPrompt },
+               ...this.context.buildLLMMessages()
+            ];
+            console.log('[Current Messages]', currentMessages);
+            const response = await this._callLLM(provider, currentMessages);
             if (!response) {
                errorCount++;
                if (errorCount >= AGENT_MAX_TOOL_ERRORS) {
                   this._notifyStep(STEP_TYPES.ERROR, `Reached maximum tool errors (${AGENT_MAX_TOOL_ERRORS}). Task aborted.`);
-                  this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
-                  await this._persistHistory();
+                  this.context.addEntry({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
+                  await this.context.persist();
                   break;
                }
                continue;
@@ -106,16 +108,18 @@ export class Agent {
             if (assistantMsg.tool_calls) {
                for (const toolCall of assistantMsg.tool_calls) {
                   if (this._aborted) break;
-                  const execResult = await this._executeToolCall(toolCall, messages);
+                  const execResult = await agentTools.executeToolCall(toolCall, messages, contentActionSender);
                   if (!execResult.success) errorCount++;
                   if (execResult.terminal) {
                      taskFinished = true;
+                     this.status = 'idle';
+                     this._notifyStatus();
                      break;
                   }
                }
             }
 
-            await this._persistHistory();
+            await this.context.persist();
             if (taskFinished) break;
          }
 
@@ -126,6 +130,40 @@ export class Agent {
       } finally {
          this.status = 'idle';
          this._notifyStatus();
+      }
+   }
+
+   async _getBaseSystemPrompt() {
+      const userSettings = configService.get(CONFIG_KEYS.USER_SETTINGS) || {};
+      const customInstructions = userSettings.customInstructions || '';
+
+      let systemPrompt = SYSTEM_PROMPT;
+      if (customInstructions) {
+         systemPrompt += `\n\nUSER'S INSTRUCTIONS and CONTEXT:\n${customInstructions}`;
+      }
+
+      try {
+         const tabs = await new Promise((resolve) => {
+            chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+         });
+         if (tabs && tabs[0]) {
+            systemPrompt += `\n\nCURRENT TAB CONTEXT:\nURL: ${tabs[0].url || 'N/A'}\nTitle: ${tabs[0].title || 'N/A'}`;
+         }
+      } catch (err) {
+         console.warn('[Agent] Could not get current tab context', err);
+      }
+
+      return systemPrompt;
+   }
+
+   async _checkSummarization(provider, systemPrompt) {
+      const agentLimits = configService.get(CONFIG_KEYS.AGENT_LIMITS);
+      const summarizeLimit = agentLimits.TRIGGER_CONTEXT_SUMMARIZE_AFTER || 100;
+
+      // We also check if we are already past the limit since the last summary
+      const messagesSinceSummary = this.context.buildLLMMessages().length;
+      if (messagesSinceSummary >= summarizeLimit) {
+         await this.context.summarize(provider, systemPrompt, this._notifyStep.bind(this));
       }
    }
 
@@ -147,29 +185,26 @@ export class Agent {
    }
 
    async _handleAssistantResponse(assistantMsg, messages) {
-      // If no tool calls, it's a direct response
       if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
          const text = assistantMsg.content || '';
          messages.push({ role: 'assistant', content: text });
-         this.history.push({ role: 'assistant', content: text, timestamp: this._timestamp() });
-         await this._persistHistory();
+         this.context.addEntry({ role: 'assistant', content: text, timestamp: this._timestamp() });
+         await this.context.persist();
          this._notifyStep(STEP_TYPES.SUCCESS, text);
          return true;
       }
 
-      // Add assistant message with tool_calls to conversation
       messages.push({
          role: 'assistant',
          content: assistantMsg.content || null,
          tool_calls: assistantMsg.tool_calls,
       });
 
-      // Notify UI of reasoning if present
       if (assistantMsg.content) {
          this._notifyStep(STEP_TYPES.THOUGHT, assistantMsg.content);
       }
 
-      this.history.push({
+      this.context.addEntry({
          role: 'assistant',
          content: assistantMsg.content || null,
          tool_calls: assistantMsg.tool_calls,
@@ -179,138 +214,18 @@ export class Agent {
       return false;
    }
 
-   async _executeToolCall(toolCall, messages) {
-      const toolName = toolCall.function.name;
-      let toolArgs = {};
-      try {
-         toolArgs = JSON.parse(toolCall.function.arguments || '{}');
-      } catch {
-         toolArgs = {};
-      }
-
-      // 1. Handle Terminal Tools
-      if (TERMINAL_TOOLS.has(toolName)) {
-         await this._handleTerminalExecution(toolCall, toolName, toolArgs, messages);
-         return { success: true, terminal: true };
-      }
-
-      // 2. Handle Content Script Tools
-      const actionLabel = this._getToolActionLabel(toolName, toolArgs);
-      this._notifyStep(STEP_TYPES.ACTION, actionLabel);
-
-      const handler = getToolHandler(toolName);
-      if (!handler) {
-         await this._handleUnknownTool(toolCall, toolName, toolArgs, messages);
-         return { success: false, terminal: false };
-      }
-
-      const payload = handler.buildPayload(toolArgs);
-      let result;
-      try {
-         result = await this._sendToContent(handler.contentAction, payload);
-      } catch (err) {
-         result = { success: false, error: err.message };
-      }
-
-      const summary = handler.formatResult(result);
-      this._recordToolResult(toolCall, toolName, toolArgs, result, summary, messages);
-      return { success: result.success !== false, terminal: false };
-   }
-
-   async _handleTerminalExecution(toolCall, toolName, toolArgs, messages) {
-      const toolResult = this._handleTerminalTool(toolName, toolArgs);
-      const toolResultStr = JSON.stringify(toolResult);
-
-      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: toolResultStr });
-      this.history.push({
-         role: 'tool',
-         tool_call_id: toolCall.id,
-         content: toolResultStr,
-         _meta: { toolName, toolArgs, summary: toolName === 'done' ? 'Task complete' : toolArgs.reason, result: toolResult },
-         timestamp: this._timestamp(),
-      });
-
-      if (toolName === 'done') {
-         const answer = toolArgs.answer || toolArgs.summary || '';
-         this.history.push({ role: 'assistant', content: answer, timestamp: this._timestamp() });
-         await this._persistHistory();
-         this._notifyStep(STEP_TYPES.SUCCESS, answer);
-         this.status = 'idle';
-         this._notifyStatus();
-      } else if (toolName === 'fail') {
-         const reason = toolArgs.reason || 'Task failed.';
-         this.history.push({ role: 'assistant', content: `Failed: ${reason}`, timestamp: this._timestamp() });
-         await this._persistHistory();
-         this._notifyStep(STEP_TYPES.ERROR, reason);
-         this.status = 'idle';
-         this._notifyStatus();
-      }
-      return true;
-   }
-
-   async _handleUnknownTool(toolCall, toolName, toolArgs, messages) {
-      const errorResult = { success: false, error: `Unknown tool: ${toolName}` };
-      this._recordToolResult(toolCall, toolName, toolArgs, errorResult, `Unknown tool: ${toolName}`, messages);
-      return false;
-   }
-
-   _recordToolResult(toolCall, toolName, toolArgs, result, summary, messages) {
-      const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
-      const truncatedResult = resultStr.slice(0, 30000);
-
-      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: truncatedResult });
-      this.history.push({
-         role: 'tool',
-         tool_call_id: toolCall.id,
-         content: truncatedResult,
-         _meta: { toolName, toolArgs, summary, result },
-         timestamp: this._timestamp(),
-      });
-
-      this._notifyStep(STEP_TYPES.TOOL_CALL, JSON.stringify({ tool: toolName, args: toolArgs, result, summary }));
-   }
-
    _handleLoopEnd(step, errorCount, maxSteps, maxErrors) {
       if (step >= maxSteps && !this._aborted) {
          this._notifyStep(STEP_TYPES.ERROR, `Reached maximum steps (${maxSteps}). Task stopped.`);
-         this.history.push({ role: 'assistant', content: `Task stopped: reached maximum steps (${maxSteps}).`, timestamp: this._timestamp() });
-         this._persistHistory();
+         this.context.addEntry({ role: 'assistant', content: `Task stopped: reached maximum steps (${maxSteps}).`, timestamp: this._timestamp() });
+         this.context.persist();
       } else if (errorCount >= maxErrors && !this._aborted) {
          this._notifyStep(STEP_TYPES.ERROR, `Reached maximum tool errors (${maxErrors}). Task aborted.`);
-         this.history.push({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
-         this._persistHistory();
+         this.context.addEntry({ role: 'assistant', content: `Task aborted: too many errors (${errorCount}).`, timestamp: this._timestamp() });
+         this.context.persist();
       }
    }
 
-   /**
-    * Build LLM-compatible messages from history.
-    * Strips our custom _meta fields and timestamps.
-    */
-   _buildLLMMessages() {
-      return this.history.map((entry) => {
-         const msg = { role: entry.role, content: entry.content || null };
-         if (entry.tool_call_id) msg.tool_call_id = entry.tool_call_id;
-         if (entry.tool_calls) msg.tool_calls = entry.tool_calls;
-         return msg;
-      });
-   }
-
-   /**
-    * Handle done/fail tools directly
-    */
-   _handleTerminalTool(toolName, args) {
-      if (toolName === 'done') {
-         return { success: true, summary: args.summary, answer: args.answer || '' };
-      }
-      if (toolName === 'fail') {
-         return { success: false, reason: args.reason };
-      }
-      return { success: false, error: 'Unknown terminal tool' };
-   }
-
-   /**
-    * Get the active tab ID
-    */
    async _getActiveTabId() {
       return new Promise((resolve, reject) => {
          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -323,14 +238,6 @@ export class Agent {
       });
    }
 
-   /**
-    * Send a message to the content script in the active tab.
-    * If the content script is not available (page navigated, not yet injected, etc.),
-    * automatically re-injects it and retries once.
-    *
-    * Pattern from reference project: detect "Receiving end does not exist" →
-    * chrome.scripting.executeScript → wait → retry.
-    */
    async _sendToContent(action, payload) {
       const tabId = await this._getActiveTabId();
 
@@ -350,7 +257,6 @@ export class Agent {
                   target: { tabId },
                   files: ['content.js'],
                });
-               // Wait for script to initialize
                await this._sleep(300);
                const retryResponse = await this._trySendMessage(tabId, action, payload);
                return retryResponse;
@@ -363,9 +269,6 @@ export class Agent {
       }
    }
 
-   /**
-    * Low-level message send wrapped in a promise.
-    */
    _trySendMessage(tabId, action, payload) {
       return new Promise((resolve, reject) => {
          chrome.tabs.sendMessage(tabId, { action, payload }, (response) => {
@@ -378,47 +281,12 @@ export class Agent {
       });
    }
 
-   /**
-    * Simple sleep utility
-    */
    _sleep(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
    }
 
-   /**
-    * Get basic page context (fallback for initial context)
-    */
-   async _getPageContext() {
-      try {
-         const result = await this._sendToContent('getPageText', {
-            scope: 'full',
-            maxChars: configService.get('page_extraction').PAGE_TEXT_EXTRACTION_THRESHOLD
-         });
-         return {
-            url: result?.url || 'N/A',
-            title: result?.title || 'N/A',
-            text: result?.text || '',
-         };
-      } catch {
-         return new Promise((resolve) => {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-               resolve({
-                  url: tabs[0]?.url || 'N/A',
-                  title: tabs[0]?.title || 'N/A',
-                  text: 'Could not extract page content.',
-               });
-            });
-         });
-      }
-   }
-
    async clearHistory() {
-      this.history = [];
-      await historyStore.clearSession(this.sessionId);
-   }
-
-   async _persistHistory() {
-      await historyStore.saveSession(this.sessionId, this.history);
+      await this.context.clear();
    }
 
    _timestamp() {
@@ -433,26 +301,5 @@ export class Agent {
 
    _notifyStatus() {
       if (this._onStatus) this._onStatus(this.status);
-   }
-
-   _getToolActionLabel(tool, args) {
-      switch (tool) {
-         case 'read_page': return 'Reading page content...';
-         case 'get_page_text': return 'Extracting text from page...';
-         case 'find': return `Looking for "${args.query}"...`;
-         case 'find_text': return `Searching for text "${args.query}"...`;
-         case 'click': return `Clicking on [${args.target}]...`;
-         case 'type': return `Typing into [${args.target}]...`;
-         case 'select': return `Selecting value in [${args.target}]...`;
-         case 'scroll': return `Scrolling ${args.direction}...`;
-         case 'hover': return `Hovering over [${args.target}]...`;
-         case 'press_key': return `Pressing ${args.key} key...`;
-         case 'extract_structured': return `Extracting structured data...`;
-         case 'wait_for': return `Waiting for ${args.condition}...`;
-         case 'navigate': return `Navigating ${args.action}...`;
-         case 'done': return 'Finishing task...';
-         case 'fail': return 'Reporting failure...';
-         default: return `Executing ${tool}...`;
-      }
    }
 }

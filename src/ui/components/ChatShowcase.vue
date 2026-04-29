@@ -4,6 +4,7 @@ import ChatStep from './ChatStep.vue'
 const demoSteps = [
   { type: 'user', content: 'Find the best selling product on this page.'},
   { type: 'thought', content: 'Analyzing page structure to identify products...', expanded: false },
+  { type: 'action', content: 'Context has been summarized', expanded: false },
   { 
     type: 'tool_call', 
     displayLabel: 'read_page(mode="compact")',
