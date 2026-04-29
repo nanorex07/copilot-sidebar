@@ -8,7 +8,13 @@ export function parseMarkdown(text) {
 
   try {
     // Configure marked for safe and clean output
+    const renderer = new marked.Renderer();
+    renderer.link = ({ href, title, text }) => {
+      return `<a href="${href}" title="${title || ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    };
+
     marked.setOptions({
+      renderer,
       gfm: true, // GitHub Flavored Markdown
       breaks: true, // Use GFM line breaks
     });
