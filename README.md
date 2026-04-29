@@ -4,6 +4,16 @@ A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can o
 
 ![Screenshot](public/screen.png)
 
+## 📑 Table of Contents
+- [✨ Features](#-features)
+- [🚀 Getting Started](#-getting-started)
+- [🏗 Architecture](#-architecture)
+- [🛠 Technology Stack](#-technology-stack)
+- [🔧 Capabilities](#-capabilities)
+- [⚙️ Configuration](#-configuration)
+- [🔒 Security & Privacy](#-security--privacy)
+- [⚖️ Trade-offs & Future Work](#️-trade-offs--future-work)
+
 ---
 
 ## ✨ Features
@@ -12,6 +22,7 @@ A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can o
 - **Rich Interaction**: Full control over DOM (Click, Type, Scroll, Select, Hover).
 - **Accessibility Aware**: Uses the Accessibility Tree for precise element targeting.
 - **Custom Instructions**: Provide global context or specific behavioral guidelines that persist across all tasks.
+- **Smart Summarization**: Automatically compresses conversational history to preserve context limits over long tasks.
 - **Persistence**: Full conversation history saved locally via IndexedDB.
 - **Privacy First**: Local storage for keys and history; no external analytics.
 
@@ -50,17 +61,17 @@ A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can o
 ## 🏗 Architecture
 
 ### High-Level Flow
-The extension follows an autonomous **Observe → Think → Act** loop, orchestrated by the Agent service.
+The extension follows an autonomous **Observe → Think → Act** loop.
 
-1. **Initialization & Context Injection**: The agent begins by retrieving the user's goal. It automatically injects the current active tab's URL and Title into the system prompt to ground the LLM in the current browsing context.
-2. **Observation**: The Agent uses the `read_page` tool to request the DOM structure from the Content Script. 
-3. **Thinking & Reasoning**: The LLM analyzes the DOM data against the user's goal and decides the next best action (e.g., clicking a specific element ID, typing into an input).
-4. **Action**: The Agent executes the chosen tool via the Content Script, passing the result back to the LLM to verify success.
-5. **Summarization (Long-running Tasks)**: If the conversation history exceeds the configured threshold (default 100 messages), the agent automatically makes a secondary LLM call to summarize the progress. This prevents context window overflow and keeps the agent focused over long tasks without losing track of the original goal.
+1. **Context Injection**: Injects the active tab's URL and Title into the system prompt.
+2. **Observation**: Uses the `read_page` tool to fetch a simplified DOM structure from the Content Script. 
+3. **Thinking**: The LLM analyzes the DOM against the goal to pick the next action.
+4. **Action**: Executes the tool via the Content Script and verifies the result.
+5. **Summarization**: Automatically compresses conversation history after 100 messages to prevent context overflow.
 
 ```mermaid
 graph TD
-    User([User]) -->|Inputs Goal| UI[Vue Sidebar]
+    User([User]) -->|Inputs Goal| UI[Sidebar Copilot]
     UI -->|Triggers| Agent[Agent Service]
     Agent -->|Injects Tab Context| Prompt[System Prompt]
     Agent -->|1. Observe| CS[Content Script]
@@ -77,11 +88,11 @@ graph TD
     UI -->|Persist| DB[(IndexedDB)]
 ```
 
-### Context & Page Extraction Details
-Extracting the entire HTML of a webpage is too large for modern LLM context windows. Copilot Sidebar solves this using a two-pronged extraction approach:
+### Context & Page Extraction
+To fit within LLM context windows, Copilot Sidebar uses two techniques:
 
-1. **Active Tab Injection**: Before every LLM call, the agent queries the browser API (`chrome.tabs.query`) to dynamically inject the current tab's URL and title. This ensures the LLM never loses track of where it is, even if it navigates across domains.
-2. **Accessibility Tree Mapping**: When the `read_page` tool is called, the Content Script traverses the DOM to build a condensed "Accessibility Tree". It strips out all styling, scripts, and non-semantic wrappers (like arbitrary `<div>`s), leaving only interactive elements (buttons, links, inputs) and meaningful text. It assigns a unique integer `[id]` to each interactive node, allowing the LLM to easily target elements (e.g., `click(target=15)`) without dealing with brittle CSS selectors.
+1. **Active Tab Injection**: Dynamically passes the current URL and title before every LLM call, keeping context fresh across navigations.
+2. **Accessibility Tree Mapping**: The `read_page` tool condenses the DOM by removing styling, scripts, and non-semantic tags. It assigns a unique integer `[id]` to interactive elements (buttons, inputs) and text, allowing the LLM to target elements reliably (e.g., `click(target=15)`).
 
 ### Low-Level Design: LLM Strategy Pattern
 We use a Strategy pattern to allow easy swapping or addition of different LLM providers.
@@ -147,7 +158,7 @@ classDiagram
 
 ---
 
-## 🔧 Supported Tools (Capabilities)
+## 🔧 Capabilities
 
 The Agent can call the following tools to interact with the browser:
 
@@ -170,7 +181,7 @@ The Agent can call the following tools to interact with the browser:
 
 ---
 
-## ⚙️ Configuration Settings
+## ⚙️ Configuration
 
 The **Config** panel allows fine-tuning the agent's behavior:
 
@@ -202,5 +213,5 @@ The current architecture is optimized for speed and simplicity in a single-agent
 
 - [ ] **Multi-Agent System & Provider Support**: Currently relies heavily on OpenAI's specific tool-calling format. Future work involves abstracting this to support a multi-agent swarm (e.g., separating the Planner, Observer, and Executor) and other open-source LLMs.
 - [ ] **Vision Capabilities**: The agent currently relies purely on DOM text and accessibility tree extraction. It cannot "see" the page visually, which limits its ability to interact with complex canvas elements or visually complex layouts.
-- [ ] **Advanced Reasoning Models**: Standard models like GPT-4o are fast but can struggle with deep planning. Support for newer reasoning-first models (like o1/o3) requires a different prompt architecture since they do not natively support strict tool-calling loops in the same way.
+- [ ] **Advanced Reasoning Models**: Standard models are fast but can struggle with deep planning. Support for newer reasoning-first models (like o1/o3) requires a stronger prompt architecture and ui structuring since they do not natively support strict tool-calling loops in the same way.
 - [ ] **Cross-Tab Capabilities**: The agent is currently restricted to the `activeTab`. Tab switching, cross-tab data collation, and window management tools are not yet implemented.
