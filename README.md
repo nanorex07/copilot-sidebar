@@ -1,74 +1,165 @@
-# Copilot Sidebar: Browser Automation Agent
+# 🤖 Copilot Sidebar
 
-Copilot Sidebar is a powerful browser automation agent built as a Chrome Extension. It leverages Large Language Models (LLMs) to understand, navigate, and interact with web pages in real-time.
+A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can observe the webpage, reason about your goals, and interact with elements directly to perform complex tasks on your behalf.
 
-## 🚀 Setup Steps
+---
 
-### 1. Development Environment
-- Ensure you have [Node.js](https://nodejs.org/) (v18+) installed.
-- Install dependencies:
-  ```bash
-  npm install
-  ```
+## 🚀 Getting Started
 
-### 2. Build the Extension
-- Run the build script to generate the `dist` folder:
-  ```bash
-  npm run build
-  ```
+### Option 1: Development Setup (from source)
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/nanorex07/copilot-sidebar.git
+   cd copilot-sidebar
+   ```
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Build the extension**:
+   ```bash
+   npm run build
+   ```
+4. **Load into Chrome**:
+   - Open Chrome and navigate to `chrome://extensions/`.
+   - Enable **"Developer mode"** (top right).
+   - Click **"Load unpacked"** and select the `dist` directory.
 
-### 3. Load into Chrome
-1. Open Chrome and navigate to `chrome://extensions/`.
-2. Enable **"Developer mode"** (toggle in the top right).
-3. Click **"Load unpacked"** and select the `dist` directory from this project.
-
-### 4. Configuration
-1. Click the Copilot Sidebar icon in your browser to open the sidepanel.
-2. Navigate to the **Settings** tab.
-3. Enter your **OpenAI API Key** (and optionally adjust the Model).
-4. You are ready to go!
+### Option 2: Installation from Release
+1. Download the latest `copilot-sidebar.zip` from the [Releases](https://github.com/nanorex07/copilot-sidebar/releases) page.
+2. Unzip the file to a local folder.
+3. Open Chrome and navigate to `chrome://extensions/`.
+4. Enable **"Developer mode"**.
+5. Click **"Load unpacked"** and select the unzipped folder.
 
 ---
 
 ## 🏗 Architecture
 
-The project follows a modular Chrome Extension architecture:
+### High-Level Flow
+The extension follows an **Observe → Think → Act** loop, orchestrated by the Agent service.
 
-### Extension Layers
-- **Sidepanel (Vue 3 + Vite)**: The primary UI where users interact with the agent. Built with Vue 3 for a reactive and modern experience.
-- **Service Worker (Background)**: Handles extension lifecycle and coordinates with the sidepanel.
-- **Content Script**: The bridge between the agent and the webpage. Injected into the active tab to perform DOM reads and interactions.
+```mermaid
+graph TD
+    User([User]) -->|Inputs Goal| UI[Vue Sidebar]
+    UI -->|Triggers| Agent[Agent Service]
+    Agent -->|1. Observe| CS[Content Script]
+    CS -->|DOM Data| Agent
+    Agent -->|2. Think| LLM[OpenAI SDK]
+    LLM -->|Tool Call| Agent
+    Agent -->|3. Act| CS
+    CS -->|Tool Result| Agent
+    Agent -->|Loop / Done| UI
+    UI -->|Persist| DB[(IndexedDB)]
+    SW[Service Worker] ---|Keep-Alive| UI
+```
 
-### Agent Design
-The **Agent Class** (`src/services/agent.js`) manages the core logic:
-1. **Perception**: Gathers page context via the Content Script.
-2. **Reasoning**: Sends context and goals to the LLM.
-3. **Action**: Parses tool calls from the LLM and executes them.
-4. **Memory**: Maintains a session-based interaction history in `IndexedDB`.
+### Low-Level Design: LLM Strategy Pattern
+We use a Strategy pattern to allow easy swapping or addition of different LLM providers.
+
+```mermaid
+classDiagram
+    class BaseProvider {
+        <<abstract>>
+        +chat(messages, tools)
+        #_execute(params)*
+        #validateConfig(config)*
+    }
+    class OpenAIProvider {
+        +chat(messages, tools)
+        #_execute(params)
+        #validateConfig(config)
+    }
+    BaseProvider <|-- OpenAIProvider
+    class ProviderFactory {
+        +createProvider(type, config)
+    }
+    ProviderFactory ..> BaseProvider
+```
+
+### Low-Level Design: Storage Domain Layers
+Centralized storage logic using a BaseStore pattern to ensure data consistency and bypass Vue reactivity issues (DataCloneError).
+
+```mermaid
+classDiagram
+    class Database {
+        <<singleton>>
+        +connect()
+    }
+    class BaseStore {
+        +get(key)
+        +set(key, value)
+        +delete(key)
+        +clear()
+    }
+    class SettingsStore {
+        +getConfig(provider)
+        +saveConfig(provider, config)
+    }
+    class HistoryStore {
+        +getSession(id)
+        +saveSession(id, data)
+    }
+    BaseStore <|-- SettingsStore
+    BaseStore <|-- HistoryStore
+    BaseStore ..> Database
+```
 
 ---
 
-## 🔍 Page Context Extraction
+## 🛠 Technology Stack
 
-Page context is gathered dynamically before the agent loop starts and after significant interactions:
-- **URL & Title**: Basic metadata from the active tab.
-- **Text Extraction**: The content script recursively traverses the DOM to extract `innerText` while filtering out scripts and hidden elements.
-- **Token Management**: To prevent hitting LLM context limits, the extracted text is truncated to a configurable threshold.
+- **Core**: JavaScript (ES6+), HTML5, CSS3.
+- **Frontend**: [Vue.js 3](https://vuejs.org/) for a reactive Sidebar UI.
+- **LLM Integration**: [OpenAI SDK](https://github.com/openai/openai-node) for high-performance reasoning and function calling.
+- **Build System**: [Vite](https://vitejs.dev/) for fast development and optimized production bundles.
+- **Styling**: Vanilla CSS with modern variables (Glassmorphism & Dark Mode).
+- **Markdown**: [Marked](https://marked.js.org/) for rendering rich AI responses.
+- **Persistence**: IndexedDB (via native API) for robust local storage.
+
 ---
 
-## 🛠 Tool & Action Design
+## 🔧 Supported Tools (Capabilities)
 
-Tools are defined as JSON schemas following the OpenAI Function Calling format.
+The Agent can call the following tools to interact with the browser:
 
-### Design Pattern
-1. **Definitions**: Schema-based descriptions in `src/tools/definitions.js` tell the LLM what is possible.
-2. **Registry**: Handlers in `src/tools/registry.js` map these calls to specific executable payloads.
-3. **Execution**: The agent sends these payloads to the content script, which uses standard Web APIs (`click()`, `dispatchEvent`, `element.value = ...`) to interact with the page.
+| Category | Tool | Usecase |
+| :--- | :--- | :--- |
+| **Observation** | `read_page` | Extracts the accessibility tree to find interactive elements. |
+| | `get_page_text` | Pulls raw text from the page for data extraction or analysis. |
+| | `find` | Uses natural language to locate specific elements (e.g., "login button"). |
+| | `find_text` | Performs a "Ctrl+F" style search for specific text snippets. |
+| **Interaction** | `click` | Clicks on a specific element identified by an ID. |
+| | `type` | Enters text into input fields, with optional "Enter" key support. |
+| | `select` | Chooses an option from a dropdown or select menu. |
+| | `scroll` | Navigates the page up or down to reveal hidden content. |
+| | `hover` | Hovers over elements to trigger tooltips or menus. |
+| | `press_key` | Simulates keyboard presses (Tab, Escape, Enter, etc.). |
+| **Lifecycle** | `navigate` | Handles back/forward navigation or page reloads. |
+| | `wait_for` | Pauses execution until a condition (element/text) appears. |
+| | `done` | Successfully finishes the task and returns the final answer. |
+| | `fail` | Gracefully stops the task if the goal cannot be reached. |
 
-### Available Tools
-- `read_page`: Detailed DOM analysis.
-- `find`: Locates specific elements using natural language queries.
-- `click` / `type` / `select`: Direct interaction with elements.
-- `scroll`: Navigates long pages.
-- `done` / `fail`: Terminal states for the agent.
+---
 
+## ⚙️ Configuration Settings
+
+The **Config** panel allows fine-tuning the agent's behavior:
+
+| Section | Setting | Description |
+| :--- | :--- | :--- |
+| **Agent Limits** | `AGENT_MAX_STEPS` | Maximum number of reasoning loops before the agent stops (default: 50). |
+| | `AGENT_MAX_TOOL_ERRORS` | Maximum consecutive tool execution errors before failing (default: 5). |
+| **Page Extraction** | `PAGE_TEXT_EXTRACTION_THRESHOLD` | Max characters to extract in a single call to prevent context overflow. |
+| | `ACCESSIBILITY_TREE_MAX_DEPTH` | How deep to traverse the DOM when building the interactive tree. |
+| | `ACCESSIBILITY_TREE_MAX_NODES` | Maximum nodes to include in the observation context. |
+| **Search** | `FIND_MAX_RESULTS` | Number of elements returned when using the `find` tool. |
+| | `FIND_TEXT_MAX_RESULTS` | Number of text snippets returned when using `find_text`. |
+
+---
+
+## 🔒 Security & Privacy
+
+- **Local Processing**: Your browsing data never leaves your computer, except for the prompts sent to your chosen LLM provider.
+- **No Analytics**: This extension does not track your usage or collect telemetry.
+- **Key Safety**: API keys are stored locally in your browser's IndexedDB and are never shared.
