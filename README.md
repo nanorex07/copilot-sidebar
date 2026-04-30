@@ -1,6 +1,6 @@
 # 🤖 Copilot Sidebar
 
-A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can observe the webpage, reason about your goals, and interact with elements directly to perform complex tasks on your behalf.
+New description, old one was too generic.
 
 ![Screenshot](public/screen.png)
 
@@ -65,13 +65,13 @@ The extension follows an autonomous **Observe → Think → Act** loop.
 
 1. **Context Injection**: Injects the active tab's URL and Title into the system prompt.
 2. **Observation**: Uses the `read_page` tool to fetch a simplified DOM structure from the Content Script. 
-3. **Thinking**: The LLM analyzes the DOM against the goal to pick the next action.
+3. **Thinking**: The LLM analyzes the DOM against the input to pick the next action.
 4. **Action**: Executes the tool via the Content Script and verifies the result.
 5. **Summarization**: Automatically compresses conversation history after 100 messages to prevent context overflow.
 
 ```mermaid
 graph TD
-    User([User]) -->|Inputs Goal| UI[Sidebar Copilot]
+    User([User]) -->| User Input | UI[Sidebar Copilot]
     UI -->|Triggers| Agent[Agent Service]
     Agent -->|Injects Tab Context| Prompt[System Prompt]
     Agent -->|1. Observe| CS[Content Script]
