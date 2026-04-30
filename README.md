@@ -2,7 +2,7 @@
 
 A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can observe the webpage, reason about your goals, and interact with elements directly to perform complex tasks on your behalf.
 
-![Screenshot](public/screen.png)
+<img src="public/screen.png" width="600" alt="Screenshot">
 
 ## 📑 Table of Contents
 - [✨ Features](#-features)
@@ -11,6 +11,7 @@ A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can o
 - [🛠 Technology Stack](#-technology-stack)
 - [🔧 Capabilities](#-capabilities)
 - [⚙️ Configuration](#-configuration)
+- [🧪 Testing](#-testing)
 - [🔒 Security & Privacy](#-security--privacy)
 - [⚖️ Trade-offs & Future Work](#️-trade-offs--future-work)
 
@@ -207,6 +208,14 @@ The **Config** panel allows fine-tuning the agent's behavior:
 
 ---
 
+## 🧪 Testing
+
+The project maintains a rigorous testing pipeline integrated into its CI/CD workflows:
+- **Unit Tests (Vitest)**: Fast, isolated tests covering core logic such as the `AgentContext`, `ConfigService`, and Tool Registry.
+- **End-to-End Tests (Playwright)**: Full browser automation tests validating UI interactions, Settings configuration, and `IndexedDB` persistence layers.
+
+---
+
 ## ⚖️ Trade-offs & Future Work
 
 The current architecture is optimized for speed and simplicity in a single-agent loop. However, some advanced capabilities are intentionally omitted or planned for future iterations:
@@ -215,3 +224,5 @@ The current architecture is optimized for speed and simplicity in a single-agent
 - [ ] **Vision Capabilities**: The agent currently relies purely on DOM text and accessibility tree extraction. It cannot "see" the page visually, which limits its ability to interact with complex canvas elements or visually complex layouts.
 - [ ] **Advanced Reasoning Models**: Standard models are fast but can struggle with deep planning. Support for newer reasoning-first models (like o1/o3) requires a stronger prompt architecture and ui structuring since they do not natively support strict tool-calling loops in the same way.
 - [ ] **Cross-Tab Capabilities**: The agent is currently restricted to the `activeTab`. Tab switching, cross-tab data collation, and window management tools are not yet implemented.
+- [ ] **Advanced Error Handling**: Better granular error handling and recovery mechanisms are needed for edge cases where the DOM mutates unexpectedly or network requests timeout.
+- [ ] **Multi-Session Management**: Saving, resuming, and managing multiple distinct agent sessions/threads is not yet supported. The agent currently operates on a single continuous session.
