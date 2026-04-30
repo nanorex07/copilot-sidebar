@@ -35,7 +35,7 @@ const handleStop = () => {
       <div class="input-main">
         <textarea
           v-model="goal"
-          placeholder="Describe your goal..."
+          placeholder="Ask copilot here..."
           @keydown.enter.prevent="handleSend"
         ></textarea>
       </div>
