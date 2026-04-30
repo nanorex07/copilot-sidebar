@@ -1,6 +1,6 @@
 # 🤖 Copilot Sidebar
 
-A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can observe the webpage, reason about your goals, and interact with elements directly to perform complex tasks on your behalf.
+This is the edited description of this readme
 
 ![Screenshot](public/screen.png)
 
@@ -13,18 +13,6 @@ A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can o
 - [⚙️ Configuration](#-configuration)
 - [🔒 Security & Privacy](#-security--privacy)
 - [⚖️ Trade-offs & Future Work](#️-trade-offs--future-work)
-
----
-
-## ✨ Features
-
-- **Autonomous Loop**: Observe → Think → Act cycle powered by LLM reasoning.
-- **Rich Interaction**: Full control over DOM (Click, Type, Scroll, Select, Hover).
-- **Accessibility Aware**: Uses the Accessibility Tree for precise element targeting.
-- **Custom Instructions**: Provide global context or specific behavioral guidelines that persist across all tasks.
-- **Smart Summarization**: Automatically compresses conversational history to preserve context limits over long tasks.
-- **Persistence**: Full conversation history saved locally via IndexedDB.
-- **Privacy First**: Local storage for keys and history; no external analytics.
 
 ---
 
