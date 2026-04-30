@@ -26,4 +26,8 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    exclude: ['**/node_modules/**', '**/dist/**', '**/playwright/**'],
+    include: ['tests/unit/**/*.spec.js']
+  }
 })

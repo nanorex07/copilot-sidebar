@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .vscode
+
+tests-results/
+playwright-report/
