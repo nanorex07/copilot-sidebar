@@ -4,16 +4,7 @@ A powerful, autonomous AI browser agent integrated as a Chrome Sidebar. It can o
 
 ![Screenshot](public/screen.png)
 
-## 📑 Table of Contents
-- [✨ Features](#-features)
-- [🚀 Getting Started](#-getting-started)
-- [🏗 Architecture](#-architecture)
-- [🛠 Technology Stack](#-technology-stack)
-- [🔧 Capabilities](#-capabilities)
-- [⚙️ Configuration](#-configuration)
-- [🔒 Security & Privacy](#-security--privacy)
-- [⚖️ Trade-offs & Future Work](#️-trade-offs--future-work)
-
+Table of contents will go here.
 ---
 
 ## ✨ Features
