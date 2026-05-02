@@ -28,4 +28,7 @@ dist-ssr
 tests-results/
 playwright-report/
 
+# coding tools
 .agents/
+.claude/
+CLAUDE.md
