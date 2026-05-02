@@ -20,11 +20,12 @@ export class LLMProvider {
    *
    * @param {Array} messages - Chat messages array
    * @param {Array} tools - Tool/function definitions
+   * @param {object} options - Optional parameters like AbortSignal
    * @returns {{ message: object, usage: object }}
    */
-  async chat(messages, tools) {
+  async chat(messages, tools, options = {}) {
     this.validateConfig();
-    return this._execute(messages, tools);
+    return this._execute(messages, tools, options);
   }
 
   /**

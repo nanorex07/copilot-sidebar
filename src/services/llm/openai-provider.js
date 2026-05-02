@@ -22,9 +22,10 @@ export class OpenAIProvider extends LLMProvider {
    * Execute the chat completion via OpenAI SDK.
    * @param {Array} messages
    * @param {Array} tools
+   * @param {object} options
    * @returns {{ message: object, usage: object }}
    */
-  async _execute(messages, tools) {
+  async _execute(messages, tools, options = {}) {
     const payload = {
       model: this.config.model || DEFAULT_OPENAI_CONFIG.model,
       temperature: this.config.temperature !== undefined ? this.config.temperature : DEFAULT_OPENAI_CONFIG.temperature,
@@ -33,7 +34,7 @@ export class OpenAIProvider extends LLMProvider {
     if (tools && tools.length > 0) {
       payload.tools = tools;
     }
-    const response = await this.client.chat.completions.create(payload);
+    const response = await this.client.chat.completions.create(payload, { signal: options.signal });
     const message = response.choices[0].message;
     return {
       message,

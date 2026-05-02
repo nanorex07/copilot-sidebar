@@ -51,7 +51,7 @@ export class AgentContext {
       });
    }
 
-   async summarize(provider, baseSystemPrompt, notifyStep) {
+   async summarize(provider, baseSystemPrompt, notifyStep, options = {}) {
       
       const messagesToSummarize = [
          { role: 'system', content: baseSystemPrompt },
@@ -60,7 +60,7 @@ export class AgentContext {
       ];
       
       try {
-         const response = await provider.chat(messagesToSummarize); // omit tools so it doesn't call tools
+         const response = await provider.chat(messagesToSummarize, [], { signal: options.signal }); // omit tools so it doesn't call tools
          const summaryText = response?.message?.content || 'Context summarized.';
          
          this.history.push({

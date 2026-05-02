@@ -18,6 +18,7 @@ export class Agent {
       this._onStep = null;
       this._onStatus = null;
       this._aborted = false;
+      this._abortController = null;
    }
 
    async init() {
@@ -35,11 +36,17 @@ export class Agent {
 
    abort() {
       this._aborted = true;
+      if (this._abortController) {
+         this._abortController.abort();
+      }
+      this.status = 'idle';
+      this._notifyStatus();
    }
 
    async run(goal) {
       this.status = 'thinking';
       this._aborted = false;
+      this._abortController = new AbortController();
       this._notifyStatus();
 
       try {
@@ -125,11 +132,16 @@ export class Agent {
 
          this._handleLoopEnd(step, errorCount, AGENT_MAX_STEPS, AGENT_MAX_TOOL_ERRORS);
       } catch (error) {
-         this._notifyStep(STEP_TYPES.ERROR, error.message);
-         console.error('[Agent Error]', error);
+         if (error.name === 'AbortError' || this._aborted) {
+            console.log('[Agent] Run aborted.');
+         } else {
+            this._notifyStep(STEP_TYPES.ERROR, error.message);
+            console.error('[Agent Error]', error);
+         }
       } finally {
          this.status = 'idle';
          this._notifyStatus();
+         this._abortController = null;
       }
    }
 
@@ -163,7 +175,7 @@ export class Agent {
       // We also check if we are already past the limit since the last summary
       const messagesSinceSummary = this.context.buildLLMMessages().length;
       if (messagesSinceSummary >= summarizeLimit) {
-         await this.context.summarize(provider, systemPrompt, this._notifyStep.bind(this));
+         await this.context.summarize(provider, systemPrompt, this._notifyStep.bind(this), { signal: this._abortController?.signal });
       }
    }
 
@@ -175,7 +187,7 @@ export class Agent {
    async _callLLM(provider, messages) {
       try {
          this._notifyStatus('thinking');
-         const response = await provider.chat(messages, TOOLS);
+         const response = await provider.chat(messages, TOOLS, { signal: this._abortController?.signal });
          this._notifyStatus('running');
          return response;
       } catch (err) {
