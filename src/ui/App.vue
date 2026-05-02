@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import Chat from './components/Chat.vue'
-import Settings from './components/Settings.vue'
-import Config from './components/Config.vue'
+import Chat from './screens/Chat.vue'
+import Settings from './screens/Settings.vue'
+import Config from './screens/Config.vue'
 import { APP_NAME, APP_VERSION } from '../config/constants'
 
 const currentView = ref('chat')

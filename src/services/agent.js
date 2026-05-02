@@ -73,9 +73,12 @@ export class Agent {
          let step = 0;
          let errorCount = 0;
          const agentLimits = configService.get(CONFIG_KEYS.AGENT_LIMITS);
+         const userSettings = configService.get(CONFIG_KEYS.USER_SETTINGS);
          const AGENT_MAX_STEPS = agentLimits.AGENT_MAX_STEPS;
          const AGENT_MAX_TOOL_ERRORS = agentLimits.AGENT_MAX_TOOL_ERRORS;
-         const agentTools = new AgentTools(this.context, this._notifyStep.bind(this));
+         const agentTools = new AgentTools(this.context, this._notifyStep.bind(this), { 
+            highlight: userSettings.highlightActions 
+         });
 
          const contentActionSender = this._sendToContent.bind(this);
 

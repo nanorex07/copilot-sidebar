@@ -28,7 +28,8 @@ export const CONFIG_KEYS = {
 
 // ── User Settings ──
 export const DEFAULT_USER_SETTINGS = {
-  customInstructions: ''
+  customInstructions: '',
+  highlightActions: false
 };
 
 // ── Agent Loop Limits ──
@@ -66,3 +67,7 @@ export const CONTENT_ACTIONS = {
   EXECUTE_ACTION: 'executeAction',
   GET_PAGE_INFO: 'getPageInfo'
 };
+
+export const HIGHLIGHTABLE_ACTIONS = new Set([
+  'click', 'type', 'select', 'hover'
+]);

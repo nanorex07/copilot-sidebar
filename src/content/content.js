@@ -233,7 +233,7 @@
 
   // ===== PAGE TEXT EXTRACTION =====
 
-  function getPageText(payload = {}) {
+  async function getPageText(payload = {}) {
     const scope = String(payload.scope || 'full').toLowerCase();
     const selector = String(payload.selector || '').trim();
     const maxChars = Math.min(Math.max(Number(payload.maxChars) || 8000, 200), 50000);
@@ -546,17 +546,35 @@
     el.dispatchEvent(event);
   }
 
-  function executeAction(action) {
+  async function highlightElement(el) {
+    if (!el) return;
+    const originalOutline = el.style.outline;
+
+    el.style.outline = '4px solid #FFD700';
+
+    await new Promise(r => setTimeout(r, 2000));
+
+    el.style.outline = originalOutline;
+  }
+
+  async function executeAction(action) {
     if (!action || typeof action !== 'object') {
       return makeError(ACTION_ERROR.INVALID_ACTION, 'Action payload must be an object');
     }
     const { type, target, params = {} } = action;
 
+    // 1. Common preparation for element-based actions
+    const elementActions = ['click', 'type', 'hover', 'select'];
+    let el = null;
+    if (elementActions.includes(type) && target) {
+      el = findElementById(target);
+      if (!el) return makeError(ACTION_ERROR.ELEMENT_NOT_FOUND, `Element [${target}] not found`);
+      el.scrollIntoView({ block: 'center', behavior: 'instant' });
+      if (action.highlight) await highlightElement(el);
+    }
+
     switch (type) {
       case 'click': {
-        const el = findElementById(target);
-        if (!el) return makeError(ACTION_ERROR.ELEMENT_NOT_FOUND, `Element [${target}] not found`);
-        el.scrollIntoView({ block: 'center', behavior: 'instant' });
         fireMouse(el, 'mousedown', { detail: 1, button: 0, buttons: 1 });
         fireMouse(el, 'mouseup', { detail: 1, button: 0, buttons: 0 });
         fireMouse(el, 'click', { detail: 1, button: 0, buttons: 0 });
@@ -565,9 +583,6 @@
       }
 
       case 'type': {
-        const el = findElementById(target);
-        if (!el) return makeError(ACTION_ERROR.ELEMENT_NOT_FOUND, `Element [${target}] not found`);
-        el.scrollIntoView({ block: 'center', behavior: 'instant' });
         el.focus();
         const text = String(params.text ?? '');
         if (!setTextLikeValue(el, text)) {
@@ -595,17 +610,12 @@
       }
 
       case 'hover': {
-        const el = findElementById(target);
-        if (!el) return makeError(ACTION_ERROR.ELEMENT_NOT_FOUND, `Element [${target}] not found`);
-        el.scrollIntoView({ block: 'center', behavior: 'instant' });
         el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
         el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
         return { success: true, description: `Hovered [${target}]` };
       }
 
       case 'select': {
-        const el = findElementById(target);
-        if (!el) return makeError(ACTION_ERROR.ELEMENT_NOT_FOUND, `Element [${target}] not found`);
         const value = String(params.value ?? '');
         if (el instanceof HTMLSelectElement) {
           el.value = value;
@@ -660,7 +670,8 @@
           sendResponse(extractAccessibilityTree(payload));
           break;
         case 'getPageText':
-          sendResponse(getPageText(payload));
+          const textResult = getPageText(payload);
+          sendResponse(textResult);
           break;
         case 'find':
           sendResponse(findByDescription(payload));
@@ -676,7 +687,8 @@
           sendResponse(waitResult);
           break;
         case 'executeAction':
-          sendResponse(executeAction(payload));
+          const actionResult = await executeAction(payload);
+          sendResponse(actionResult);
           break;
         case 'getPageInfo':
           sendResponse({

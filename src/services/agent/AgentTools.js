@@ -1,10 +1,11 @@
 import { getToolHandler, TERMINAL_TOOLS } from '../../tools/registry';
-import { STEP_TYPES } from '../../config/constants';
+import { STEP_TYPES, HIGHLIGHTABLE_ACTIONS } from '../../config/constants';
 
 export class AgentTools {
-   constructor(agentContext, notifyStep) {
+   constructor(agentContext, notifyStep, config = {}) {
       this.context = agentContext;
       this.notifyStep = notifyStep;
+      this.config = config;
    }
 
    async executeToolCall(toolCall, messages, contentActionSender) {
@@ -33,6 +34,11 @@ export class AgentTools {
       }
 
       const payload = handler.buildPayload(toolArgs);
+
+      if (this.config.highlight && HIGHLIGHTABLE_ACTIONS.has(toolName)) {
+         payload.highlight = true;
+      }
+
       let result;
       try {
          result = await contentActionSender(handler.contentAction, payload);
@@ -54,11 +60,11 @@ export class AgentTools {
       } else {
          toolResult = { success: false, error: 'Unknown terminal tool' };
       }
-      
+
       const toolResultStr = JSON.stringify(toolResult);
 
       messages.push({ role: 'tool', tool_call_id: toolCall.id, content: toolResultStr });
-      
+
       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       this.context.addEntry({
          role: 'tool',

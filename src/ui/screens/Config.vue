@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { configService } from '../../services/config';
 import { DEFAULT_AGENT_LIMITS, DEFAULT_PAGE_EXTRACTION, DEFAULT_USER_SETTINGS, CONFIG_KEYS } from '../../config/constants';
+import AppToggle from '../components/AppToggle.vue';
 
 const limits = ref({});
 const extraction = ref({});
@@ -101,6 +102,11 @@ const restoreUser = async () => {
               rows="4"
             ></textarea>
           </div>
+
+          <AppToggle 
+            v-model="userSettings.highlightActions" 
+            label="Highlight actions on page (1s delay)" 
+          />
 
           <div class="provider-actions">
             <button class="save-btn" @click="saveUser">
@@ -268,6 +274,7 @@ const restoreUser = async () => {
   resize: vertical;
   line-height: 1.6;
 }
+
 .provider-actions {
   display: flex;
   align-items: center;
