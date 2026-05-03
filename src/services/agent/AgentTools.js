@@ -8,7 +8,7 @@ export class AgentTools {
       this.config = config;
    }
 
-   async executeToolCall(toolCall, messages, contentActionSender) {
+   async executeToolCall(toolCall, contentActionSender) {
       const toolName = toolCall.function.name;
       let toolArgs = {};
       try {
@@ -19,7 +19,7 @@ export class AgentTools {
 
       // 1. Handle Terminal Tools
       if (TERMINAL_TOOLS.has(toolName)) {
-         await this._handleTerminalExecution(toolCall, toolName, toolArgs, messages);
+         await this._handleTerminalExecution(toolCall, toolName, toolArgs);
          return { success: true, terminal: true, toolName };
       }
 
@@ -29,7 +29,7 @@ export class AgentTools {
 
       const handler = getToolHandler(toolName);
       if (!handler) {
-         await this._handleUnknownTool(toolCall, toolName, toolArgs, messages);
+         await this._handleUnknownTool(toolCall, toolName, toolArgs);
          return { success: false, terminal: false };
       }
 
@@ -47,11 +47,11 @@ export class AgentTools {
       }
 
       const summary = handler.formatResult(result);
-      this._recordToolResult(toolCall, toolName, toolArgs, result, summary, messages);
+      this._recordToolResult(toolCall, toolName, toolArgs, result, summary);
       return { success: result.success !== false, terminal: false, toolName };
    }
 
-   async _handleTerminalExecution(toolCall, toolName, toolArgs, messages) {
+   async _handleTerminalExecution(toolCall, toolName, toolArgs) {
       let toolResult;
       if (toolName === 'done') {
          toolResult = { success: true, summary: toolArgs.summary, answer: toolArgs.answer || '' };
@@ -62,8 +62,6 @@ export class AgentTools {
       }
 
       const toolResultStr = JSON.stringify(toolResult);
-
-      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: toolResultStr });
 
       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       this.context.addEntry({
@@ -88,17 +86,16 @@ export class AgentTools {
       return true;
    }
 
-   async _handleUnknownTool(toolCall, toolName, toolArgs, messages) {
+   async _handleUnknownTool(toolCall, toolName, toolArgs) {
       const errorResult = { success: false, error: `Unknown tool: ${toolName}` };
-      this._recordToolResult(toolCall, toolName, toolArgs, errorResult, `Unknown tool: ${toolName}`, messages);
+      this._recordToolResult(toolCall, toolName, toolArgs, errorResult, `Unknown tool: ${toolName}`);
       return false;
    }
 
-   _recordToolResult(toolCall, toolName, toolArgs, result, summary, messages) {
+   _recordToolResult(toolCall, toolName, toolArgs, result, summary) {
       const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
       const truncatedResult = resultStr.slice(0, 30000);
 
-      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: truncatedResult });
       this.context.addEntry({
          role: 'tool',
          tool_call_id: toolCall.id,

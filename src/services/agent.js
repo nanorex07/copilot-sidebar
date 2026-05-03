@@ -62,12 +62,6 @@ export class Agent {
             return;
          }
 
-         const messages = [
-            { role: 'system', content: systemPrompt },
-            ...this.context.buildLLMMessages(),
-            { role: 'user', content: goal }
-         ];
-
          this.context.addEntry({ role: 'user', content: goal, timestamp: this._timestamp() });
 
          let step = 0;
@@ -76,8 +70,8 @@ export class Agent {
          const userSettings = configService.get(CONFIG_KEYS.USER_SETTINGS);
          const AGENT_MAX_STEPS = agentLimits.AGENT_MAX_STEPS;
          const AGENT_MAX_TOOL_ERRORS = agentLimits.AGENT_MAX_TOOL_ERRORS;
-         const agentTools = new AgentTools(this.context, this._notifyStep.bind(this), { 
-            highlight: userSettings.highlightActions 
+         const agentTools = new AgentTools(this.context, this._notifyStep.bind(this), {
+            highlight: userSettings.highlightActions
          });
 
          const contentActionSender = this._sendToContent.bind(this);
@@ -110,7 +104,7 @@ export class Agent {
             }
 
             const assistantMsg = response.message;
-            const isDone = await this._handleAssistantResponse(assistantMsg, messages);
+            const isDone = await this._handleAssistantResponse(assistantMsg);
             if (isDone) break;
 
             // Process each tool call
@@ -118,7 +112,7 @@ export class Agent {
             if (assistantMsg.tool_calls) {
                for (const toolCall of assistantMsg.tool_calls) {
                   if (this._aborted) break;
-                  const execResult = await agentTools.executeToolCall(toolCall, messages, contentActionSender);
+                  const execResult = await agentTools.executeToolCall(toolCall, contentActionSender);
                   if (!execResult.success) errorCount++;
                   if (execResult.terminal) {
                      taskFinished = true;
@@ -199,32 +193,23 @@ export class Agent {
       }
    }
 
-   async _handleAssistantResponse(assistantMsg, messages) {
+   async _handleAssistantResponse(assistantMsg) {
       if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
          const text = assistantMsg.content || '';
-         messages.push({ role: 'assistant', content: text });
          this.context.addEntry({ role: 'assistant', content: text, timestamp: this._timestamp() });
          await this.context.persist();
          this._notifyStep(STEP_TYPES.SUCCESS, text);
          return true;
       }
-
-      messages.push({
-         role: 'assistant',
-         content: assistantMsg.content || null,
-         tool_calls: assistantMsg.tool_calls,
-      });
-
-      if (assistantMsg.content) {
-         this._notifyStep(STEP_TYPES.THOUGHT, assistantMsg.content);
-      }
-
       this.context.addEntry({
          role: 'assistant',
          content: assistantMsg.content || null,
          tool_calls: assistantMsg.tool_calls,
          timestamp: this._timestamp(),
       });
+      if (assistantMsg.content) {
+         this._notifyStep(STEP_TYPES.THOUGHT, assistantMsg.content);
+      }
 
       return false;
    }
