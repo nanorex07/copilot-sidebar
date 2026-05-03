@@ -79,59 +79,53 @@ const restoreUser = async () => {
 </script>
 
 <template>
-  <div class="config-view">
-    <div class="settings-content">
-      <div class="settings-intro">
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div class="flex-1 overflow-y-auto px-4 pt-4 pb-5 sm:px-5">
+      <div class="mb-6 text-[13px] leading-relaxed text-skin-muted">
         Manage advanced Agent logic constraints and page extraction thresholds.
       </div>
 
-      <!-- User Settings Section -->
-      <div class="settings-section">
-        <div class="section-header collapsible" @click="userOpen = !userOpen">
+      <div class="settings-section mb-6">
+        <div class="mb-3 flex cursor-pointer select-none items-center gap-2 text-skin-muted transition hover:text-skin-text" @click="userOpen = !userOpen">
           <span class="i i-user"></span>
-          <span class="section-title">USER SETTINGS</span>
-          <span class="i i-chevron-right chevron" :class="{ open: userOpen }"></span>
+          <span class="section-title flex-1 text-[11px] font-semibold tracking-[1.5px]">USER SETTINGS</span>
+          <span class="i i-chevron-right transition" :class="userOpen ? 'rotate-90' : ''"></span>
         </div>
 
-        <div v-show="userOpen" class="provider-card">
-          <div class="input-group">
-            <label class="input-label">Custom Instructions</label>
-            <textarea 
-              v-model="userSettings.customInstructions" 
-              class="provider-input provider-textarea" 
-              placeholder="E.g. Always explain code concisely, or prefer using the scroll tool before clicking..."
+        <div v-show="userOpen" class="animate-reveal-soft rounded-[10px] border border-white/5 bg-[#21252b] p-4">
+          <div class="mb-4">
+            <label class="mb-2 block text-[10px] uppercase tracking-[1px] text-skin-muted">Custom Instructions</label>
+            <textarea
+              v-model="userSettings.customInstructions"
+              class="min-h-[100px] w-full resize-y rounded-lg border border-white/10 bg-[#1b1e23] px-3 py-2.5 text-[13px] leading-relaxed text-skin-text outline-none transition focus:border-skin-accent"
+              placeholder="E.g. Always explain code concisely..."
               rows="4"
             ></textarea>
           </div>
 
-          <AppToggle 
-            v-model="userSettings.highlightActions" 
-            label="Highlight actions on page (1s delay)" 
-          />
+          <AppToggle v-model="userSettings.highlightActions" label="Highlight actions on page (1s delay)" />
 
-          <div class="provider-actions">
-            <button class="save-btn" @click="saveUser">
+          <div class="mt-5 flex flex-wrap items-center gap-3">
+            <button class="inline-flex items-center gap-2 rounded-md border border-skin-accent/40 bg-skin-accent/18 px-3.5 py-2 text-xs text-skin-accent transition hover:border-skin-accent hover:bg-skin-accent/25" @click="saveUser">
               <span class="i i-save"></span>
               <span>Save</span>
             </button>
-            <button class="default-btn" @click="restoreUser">
+            <button class="rounded-md border border-white/10 bg-white/5 px-3.5 py-2 text-xs text-skin-muted transition hover:bg-white/10 hover:text-skin-text" @click="restoreUser">
               Restore Defaults
             </button>
-            <span v-if="saveUserStatus" class="status-msg" :class="{ success: saveUserStatus.includes('Saved'), error: !saveUserStatus.includes('Saved') }">{{ saveUserStatus }}</span>
+            <span v-if="saveUserStatus" class="status-msg text-xs" :class="saveUserStatus.includes('Saved') ? 'text-skin-success' : 'text-skin-error'">{{ saveUserStatus }}</span>
           </div>
         </div>
       </div>
 
-
-      <!-- Agent Loop Limits Section -->
-      <div class="settings-section">
-        <div class="section-header collapsible" @click="limitsOpen = !limitsOpen">
+      <div class="settings-section mb-6">
+        <div class="mb-3 flex cursor-pointer select-none items-center gap-2 text-skin-muted transition hover:text-skin-text" @click="limitsOpen = !limitsOpen">
           <span class="i i-list-checks"></span>
-          <span class="section-title">AGENT LOOP LIMITS</span>
-          <span class="i i-chevron-right chevron" :class="{ open: limitsOpen }"></span>
+          <span class="section-title flex-1 text-[11px] font-semibold tracking-[1.5px]">AGENT LOOP LIMITS</span>
+          <span class="i i-chevron-right transition" :class="limitsOpen ? 'rotate-90' : ''"></span>
         </div>
 
-        <div v-show="limitsOpen" class="provider-card">
+        <div v-show="limitsOpen" class="animate-reveal-soft rounded-[10px] border border-white/5 bg-[#21252b] p-4">
           <NumberInput
             v-for="(val, key) in limits"
             :key="key"
@@ -140,28 +134,27 @@ const restoreUser = async () => {
             :min="1"
           />
 
-          <div class="provider-actions">
-            <button class="save-btn" @click="saveLimits">
+          <div class="mt-5 flex flex-wrap items-center gap-3">
+            <button class="inline-flex items-center gap-2 rounded-md border border-skin-accent/40 bg-skin-accent/18 px-3.5 py-2 text-xs text-skin-accent transition hover:border-skin-accent hover:bg-skin-accent/25" @click="saveLimits">
               <span class="i i-save"></span>
               <span>Save</span>
             </button>
-            <button class="default-btn" @click="restoreLimits">
+            <button class="rounded-md border border-white/10 bg-white/5 px-3.5 py-2 text-xs text-skin-muted transition hover:bg-white/10 hover:text-skin-text" @click="restoreLimits">
               Restore Defaults
             </button>
-            <span v-if="saveLimitsStatus" class="status-msg" :class="{ success: saveLimitsStatus.includes('Saved'), error: !saveLimitsStatus.includes('Saved') }">{{ saveLimitsStatus }}</span>
+            <span v-if="saveLimitsStatus" class="status-msg text-xs" :class="saveLimitsStatus.includes('Saved') ? 'text-skin-success' : 'text-skin-error'">{{ saveLimitsStatus }}</span>
           </div>
         </div>
       </div>
 
-      <!-- Page Extraction Section -->
-      <div class="settings-section">
-        <div class="section-header collapsible" @click="extractionOpen = !extractionOpen">
+      <div class="settings-section mb-6">
+        <div class="mb-3 flex cursor-pointer select-none items-center gap-2 text-skin-muted transition hover:text-skin-text" @click="extractionOpen = !extractionOpen">
           <span class="i i-bookmark"></span>
-          <span class="section-title">PAGE EXTRACTION</span>
-          <span class="i i-chevron-right chevron" :class="{ open: extractionOpen }"></span>
+          <span class="section-title flex-1 text-[11px] font-semibold tracking-[1.5px]">PAGE EXTRACTION</span>
+          <span class="i i-chevron-right transition" :class="extractionOpen ? 'rotate-90' : ''"></span>
         </div>
 
-        <div v-show="extractionOpen" class="provider-card">
+        <div v-show="extractionOpen" class="animate-reveal-soft rounded-[10px] border border-white/5 bg-[#21252b] p-4">
           <NumberInput
             v-for="(val, key) in extraction"
             :key="key"
@@ -170,15 +163,15 @@ const restoreUser = async () => {
             :min="1"
           />
 
-          <div class="provider-actions">
-            <button class="save-btn" @click="saveExtraction">
+          <div class="mt-5 flex flex-wrap items-center gap-3">
+            <button class="inline-flex items-center gap-2 rounded-md border border-skin-accent/40 bg-skin-accent/18 px-3.5 py-2 text-xs text-skin-accent transition hover:border-skin-accent hover:bg-skin-accent/25" @click="saveExtraction">
               <span class="i i-save"></span>
               <span>Save</span>
             </button>
-            <button class="default-btn" @click="restoreExtraction">
+            <button class="rounded-md border border-white/10 bg-white/5 px-3.5 py-2 text-xs text-skin-muted transition hover:bg-white/10 hover:text-skin-text" @click="restoreExtraction">
               Restore Defaults
             </button>
-            <span v-if="saveExtractionStatus" class="status-msg" :class="{ success: saveExtractionStatus.includes('Saved'), error: !saveExtractionStatus.includes('Saved') }">{{ saveExtractionStatus }}</span>
+            <span v-if="saveExtractionStatus" class="status-msg text-xs" :class="saveExtractionStatus.includes('Saved') ? 'text-skin-success' : 'text-skin-error'">{{ saveExtractionStatus }}</span>
           </div>
         </div>
       </div>
@@ -186,140 +179,3 @@ const restoreUser = async () => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.config-view {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-}
-.settings-content {
-  padding: 18px 16px 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-.settings-intro {
-  color: var(--text2);
-  font-size: 13px;
-  line-height: 1.5;
-  margin-bottom: 24px;
-}
-.settings-section {
-  margin-bottom: 24px;
-}
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  color: var(--text2);
-}
-.section-header.collapsible {
-  cursor: pointer;
-  user-select: none;
-}
-.section-header.collapsible:hover {
-  color: var(--text);
-}
-.section-title {
-  font-size: 11px;
-  letter-spacing: 1.5px;
-  font-weight: 600;
-  flex: 1;
-}
-.chevron {
-  transition: transform 0.2s;
-}
-.chevron.open {
-  transform: rotate(90deg);
-}
-.provider-card {
-  background: #21252b;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-  padding: 16px;
-  animation: reveal-soft 0.2s ease-out;
-}
-.provider-textarea {
-  min-height: 100px;
-  resize: vertical;
-  line-height: 1.6;
-}
-
-.provider-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-}
-.save-btn {
-  background: rgba(82, 148, 226, 0.18);
-  border: 1px solid rgba(82, 148, 226, 0.42);
-  color: var(--accent);
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
-}
-.save-btn:hover {
-  background: rgba(82, 148, 226, 0.25);
-  border-color: var(--accent);
-}
-.default-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text2);
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.default-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
-}
-.status-msg {
-  font-size: 12px;
-}
-.status-msg.success {
-  color: var(--success);
-}
-.status-msg.error {
-  color: var(--error);
-}
-@keyframes reveal-soft {
-  0% { opacity: 0; transform: translateY(-4px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-.input-group {
-  margin-bottom: 16px;
-}
-.input-label {
-  display: block;
-  font-size: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--text2);
-  margin-bottom: 8px;
-}
-.provider-input {
-  width: 100%;
-  background: #1b1e23;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 10px 12px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-.provider-input:focus {
-  border-color: var(--accent);
-}
-</style>
