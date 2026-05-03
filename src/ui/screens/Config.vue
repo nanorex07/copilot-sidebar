@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { configService } from '../../services/config';
 import { DEFAULT_AGENT_LIMITS, DEFAULT_PAGE_EXTRACTION, DEFAULT_USER_SETTINGS, CONFIG_KEYS } from '../../config/constants';
 import AppToggle from '../components/AppToggle.vue';
+import NumberInput from '../components/NumberInput.vue';
 
 const limits = ref({});
 const extraction = ref({});
@@ -131,15 +132,13 @@ const restoreUser = async () => {
         </div>
 
         <div v-show="limitsOpen" class="provider-card">
-          <div class="input-group" v-for="(val, key) in limits" :key="key">
-            <label class="input-label">{{ key.replace(/_/g, ' ') }}</label>
-            <input 
-              v-model.number="limits[key]" 
-              type="number" 
-              min="1"
-              class="provider-input" 
-            />
-          </div>
+          <NumberInput
+            v-for="(val, key) in limits"
+            :key="key"
+            :label="key.replace(/_/g, ' ')"
+            v-model="limits[key]"
+            :min="1"
+          />
 
           <div class="provider-actions">
             <button class="save-btn" @click="saveLimits">
@@ -163,15 +162,13 @@ const restoreUser = async () => {
         </div>
 
         <div v-show="extractionOpen" class="provider-card">
-          <div class="input-group" v-for="(val, key) in extraction" :key="key">
-            <label class="input-label">{{ key.replace(/_/g, ' ') }}</label>
-            <input 
-              v-model.number="extraction[key]" 
-              type="number" 
-              min="1"
-              class="provider-input" 
-            />
-          </div>
+          <NumberInput
+            v-for="(val, key) in extraction"
+            :key="key"
+            :label="key.replace(/_/g, ' ')"
+            v-model="extraction[key]"
+            :min="1"
+          />
 
           <div class="provider-actions">
             <button class="save-btn" @click="saveExtraction">
@@ -244,31 +241,6 @@ const restoreUser = async () => {
   padding: 16px;
   animation: reveal-soft 0.2s ease-out;
 }
-.input-group {
-  margin-bottom: 16px;
-}
-.input-label {
-  display: block;
-  font-size: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--text2);
-  margin-bottom: 8px;
-}
-.provider-input {
-  width: 100%;
-  background: #1b1e23;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 10px 12px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-.provider-input:focus {
-  border-color: var(--accent);
-}
 .provider-textarea {
   min-height: 100px;
   resize: vertical;
@@ -324,5 +296,30 @@ const restoreUser = async () => {
 @keyframes reveal-soft {
   0% { opacity: 0; transform: translateY(-4px); }
   100% { opacity: 1; transform: translateY(0); }
+}
+.input-group {
+  margin-bottom: 16px;
+}
+.input-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+.provider-input {
+  width: 100%;
+  background: #1b1e23;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+.provider-input:focus {
+  border-color: var(--accent);
 }
 </style>
