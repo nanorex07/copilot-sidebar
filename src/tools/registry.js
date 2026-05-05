@@ -191,6 +191,7 @@ const TOOL_REGISTRY = {
  * Terminal tools handled directly by the agent, not dispatched to content script.
  */
 export const TERMINAL_TOOLS = new Set(['done', 'fail']);
+export const INTERRUPT_TOOLS = new Set(['human_in_the_loop', 'human_context']);
 
 /**
  * Get the registry entry for a tool

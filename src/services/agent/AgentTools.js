@@ -1,5 +1,6 @@
-import { getToolHandler, TERMINAL_TOOLS } from '../../tools/registry';
-import { STEP_TYPES, HIGHLIGHTABLE_ACTIONS } from '../../config/constants';
+import { getToolHandler, TERMINAL_TOOLS, INTERRUPT_TOOLS } from '../../tools/registry';
+import { STEP_TYPES, HIGHLIGHTABLE_ACTIONS, CONFIG_KEYS } from '../../config/constants';
+import { configService } from '../config';
 
 export class AgentTools {
    constructor(agentContext, notifyStep, config = {}) {
@@ -21,6 +22,10 @@ export class AgentTools {
       if (TERMINAL_TOOLS.has(toolName)) {
          await this._handleTerminalExecution(toolCall, toolName, toolArgs);
          return { success: true, terminal: true, toolName };
+      }
+
+      if (INTERRUPT_TOOLS.has(toolName)) {
+         return this._handleInterruptExecution(toolCall, toolName, toolArgs);
       }
 
       // 2. Handle Content Script Tools
@@ -92,6 +97,72 @@ export class AgentTools {
       return false;
    }
 
+   async _handleInterruptExecution(toolCall, toolName, toolArgs) {
+      if (!this.config.requestHumanInput) {
+         const result = { success: false, error: 'Human input bridge unavailable.' };
+         this._recordToolResult(toolCall, toolName, toolArgs, result, result.error);
+         return { success: false, terminal: false, toolName };
+      }
+
+      if (toolName === 'human_in_the_loop') {
+         return this._handleHumanChoiceInterrupt(toolCall, toolArgs);
+      }
+
+      if (toolName === 'human_context') {
+         return this._handleHumanTextInterrupt(toolCall, toolArgs);
+      }
+
+      const result = { success: false, error: `Unsupported interrupt tool: ${toolName}` };
+      this._recordToolResult(toolCall, toolName, toolArgs, result, result.error);
+      return { success: false, terminal: false, toolName };
+   }
+
+   async _handleHumanChoiceInterrupt(toolCall, toolArgs) {
+      const limits = configService.get(CONFIG_KEYS.AGENT_LIMITS) || {};
+      const maxOptions = Number(limits.HUMAN_IN_THE_LOOP_MAX_OPTIONS) || 4;
+      const options = Array.isArray(toolArgs.options)
+         ? toolArgs.options.slice(0, maxOptions).map((opt) => String(opt))
+         : [];
+
+      if (!toolArgs.question || options.length === 0) {
+         const result = { success: false, error: 'Invalid human_in_the_loop payload. Requires question and non-empty options.' };
+         this._recordToolResult(toolCall, 'human_in_the_loop', toolArgs, result, result.error);
+         return { success: false, terminal: false, toolName: 'human_in_the_loop' };
+      }
+
+      const selection = await this.config.requestHumanInput({
+         interruptTool: 'human_in_the_loop',
+         inputType: 'choice',
+         toolCallId: toolCall.id,
+         question: String(toolArgs.question),
+         options
+      });
+
+      const chosenIndex = options.findIndex((opt) => opt === selection);
+      const result = { success: true, question: String(toolArgs.question), options, selectedOption: selection, selectedIndex: chosenIndex };
+      this._recordToolResult(toolCall, 'human_in_the_loop', toolArgs, result, `User selected: ${selection}`);
+      return { success: true, terminal: false, toolName: 'human_in_the_loop' };
+   }
+
+   async _handleHumanTextInterrupt(toolCall, toolArgs) {
+      if (!toolArgs.question) {
+         const result = { success: false, error: 'Invalid human_context payload. Requires question.' };
+         this._recordToolResult(toolCall, 'human_context', toolArgs, result, result.error);
+         return { success: false, terminal: false, toolName: 'human_context' };
+      }
+
+      const responseText = await this.config.requestHumanInput({
+         interruptTool: 'human_context',
+         inputType: 'text',
+         toolCallId: toolCall.id,
+         question: String(toolArgs.question)
+      });
+
+      const result = { success: true, question: String(toolArgs.question), response: String(responseText || '') };
+      this._recordToolResult(toolCall, 'human_context', toolArgs, result, 'Received user context');
+      return { success: true, terminal: false, toolName: 'human_context' };
+   }
+
    _recordToolResult(toolCall, toolName, toolArgs, result, summary) {
       const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
       const truncatedResult = resultStr.slice(0, 30000);
@@ -124,6 +195,8 @@ export class AgentTools {
          case 'navigate': return `Navigating ${args.action}...`;
          case 'done': return 'Finishing task...';
          case 'fail': return 'Reporting failure...';
+         case 'human_in_the_loop': return 'Asking user to choose next action...';
+         case 'human_context': return 'Asking user for additional context...';
          default: return `Executing ${tool}...`;
       }
    }

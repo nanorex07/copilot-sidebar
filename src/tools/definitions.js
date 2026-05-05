@@ -274,6 +274,50 @@ export const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'human_in_the_loop',
+      description: 'Ask the user to choose one option before continuing. Use this when multiple plausible actions exist and user intent is ambiguous.',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description: 'Short question to ask the user.',
+          },
+          options: {
+            type: 'array',
+            description: 'List of actionable choices for the user. Keep concise.',
+            items: {
+              type: 'string',
+            },
+            minItems: 2,
+          },
+        },
+        required: ['question', 'options'],
+      },
+    },
+  },
+
+  {
+    type: 'function',
+    function: {
+      name: 'human_context',
+      description: 'Ask the user for free-text context before continuing. Use for login details, form details, preferences, or missing business context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description: 'Specific prompt for the user to provide context.',
+          },
+        },
+        required: ['question'],
+      },
+    },
+  },
+
+  {
+    type: 'function',
+    function: {
       name: 'done',
       description: 'Mark the task as completed successfully. For information tasks, put the extracted answer in "answer". Always provide a summary.',
       parameters: {

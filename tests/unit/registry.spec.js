@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getToolHandler, TERMINAL_TOOLS } from '../../src/tools/registry';
+import { getToolHandler, TERMINAL_TOOLS, INTERRUPT_TOOLS } from '../../src/tools/registry';
 import { CONTENT_ACTIONS } from '../../src/config/constants';
 import { configService } from '../../src/services/config';
 
@@ -38,6 +38,12 @@ describe('Tool Registry', () => {
       expect(TERMINAL_TOOLS.has('done')).toBe(true);
       expect(TERMINAL_TOOLS.has('fail')).toBe(true);
       expect(TERMINAL_TOOLS.has('click')).toBe(false);
+    });
+
+    it('should correctly expose INTERRUPT_TOOLS', () => {
+      expect(INTERRUPT_TOOLS.has('human_in_the_loop')).toBe(true);
+      expect(INTERRUPT_TOOLS.has('human_context')).toBe(true);
+      expect(INTERRUPT_TOOLS.has('done')).toBe(false);
     });
   });
 

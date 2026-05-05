@@ -7,12 +7,16 @@ import { STEP_TYPES } from '../../config/constants'
 import ChatShowcase from '../components/ChatShowcase.vue'
 import ChatStep from '../components/ChatStep.vue'
 import ChatInput from '../components/ChatInput.vue'
+import HumanInputPrompt from '../components/HumanInputPrompt.vue'
 
 const goal = ref('')
 const steps = ref([])
 const isRunning = ref(false)
 const isGenerating = ref(false)
+const agentStatus = ref('idle')
 const stepsContainer = ref(null)
+const pendingHumanPrompt = ref(null)
+const chatInputRef = ref(null)
 
 const agent = new Agent('main-session')
 
@@ -30,8 +34,24 @@ onMounted(async () => {
   })
 
   agent.onStatus((status) => {
-    isRunning.value = (status === 'running' || status === 'thinking')
+    agentStatus.value = status
+    isRunning.value = (status === 'running' || status === 'thinking' || status === 'waiting_for_input')
     isGenerating.value = (status === 'thinking')
+  })
+
+  agent.onHumanInput((payload) => {
+    pendingHumanPrompt.value = payload
+    steps.value.push({
+      type: STEP_TYPES.INTERRUPT,
+      content: payload.question,
+      timestamp: payload.timestamp,
+    })
+    scrollToBottom()
+    if (payload.inputType === 'text') {
+      nextTick(() => {
+        chatInputRef.value?.focusInput?.()
+      })
+    }
   })
 
   if (agent.history.length > 0) {
@@ -40,7 +60,14 @@ onMounted(async () => {
       if (entry._isSummary) continue
 
       if (entry.role === 'user') {
-        steps.value.push({ type: STEP_TYPES.USER, content: entry.content, timestamp })
+        steps.value.push({
+          type: STEP_TYPES.USER,
+          content: entry.content,
+          timestamp,
+          isInterruptReply: !!entry?._meta?.fromInterrupt,
+          interruptTool: entry?._meta?.interruptTool || null,
+          interruptQuestion: entry?._meta?.question || ''
+        })
       } else if (entry.role === 'assistant' && entry.tool_calls) {
         if (entry.content) {
           steps.value.push({ type: STEP_TYPES.THOUGHT, content: entry.content, timestamp })
@@ -115,6 +142,8 @@ function formatToolLabel(tool, args) {
     case 'navigate': return `Navigating ${args.action}`
     case 'done': return `Task complete`
     case 'fail': return `Task failed: ${args.reason || ''}`
+    case 'human_in_the_loop': return `Waiting for user choice`
+    case 'human_context': return `Waiting for user context`
     default: return `${tool}(${JSON.stringify(args)})`
   }
 }
@@ -145,7 +174,27 @@ const scrollToBottom = async () => {
 }
 
 const handleSend = async (text) => {
-  if (!text.trim() || isRunning.value) return
+  if (!text.trim()) return
+
+  if (agentStatus.value === 'waiting_for_input' && pendingHumanPrompt.value?.inputType === 'text') {
+    const userReply = text
+    goal.value = ''
+    steps.value.push({
+      type: STEP_TYPES.USER,
+      content: userReply,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isInterruptReply: true,
+      interruptTool: 'human_context',
+      interruptQuestion: pendingHumanPrompt.value?.question || ''
+    })
+    pendingHumanPrompt.value = null
+    await agent.submitHumanInput(userReply)
+    scrollToBottom()
+    return
+  }
+
+  if (isRunning.value) return
+
   const userGoal = text
   goal.value = ''
   steps.value.push({
@@ -159,11 +208,27 @@ const handleSend = async (text) => {
 
 const handleStop = () => {
   agent.abort()
+  pendingHumanPrompt.value = null
+}
+
+const handleHumanSelection = async (option) => {
+  steps.value.push({
+    type: STEP_TYPES.USER,
+    content: option,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    isInterruptReply: true,
+    interruptTool: 'human_in_the_loop',
+    interruptQuestion: pendingHumanPrompt.value?.question || ''
+  })
+  pendingHumanPrompt.value = null
+  await agent.submitHumanInput(option)
+  scrollToBottom()
 }
 
 const clearHistory = async () => {
   await agent.clearHistory()
   steps.value = []
+  pendingHumanPrompt.value = null
 }
 
 defineExpose({ clearHistory })
@@ -197,9 +262,16 @@ defineExpose({ clearHistory })
       </div>
     </div>
 
+    <HumanInputPrompt
+      v-if="pendingHumanPrompt && pendingHumanPrompt.inputType === 'choice'"
+      :prompt="pendingHumanPrompt"
+      @select="handleHumanSelection"
+    />
     <ChatInput
+      ref="chatInputRef"
       v-model="goal"
       :isRunning="isRunning"
+      :inputEnabled="!isRunning || (agentStatus === 'waiting_for_input' && pendingHumanPrompt?.inputType === 'text')"
       @send="handleSend"
       @stop="handleStop"
     />

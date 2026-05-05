@@ -27,8 +27,12 @@ const handleCopy = async () => {
   <div class="flex w-full" :class="step.type === 'user' ? 'justify-end' : ''">
     <div
       v-if="step.type === 'user'"
-      class="max-w-[88%] rounded-xl rounded-br-[2px] border border-skin-accent/20 bg-skin-accent/12 px-4 py-3 text-sm text-skin-text animate-reveal-soft sm:max-w-[80%]"
+      class="max-w-[88%] rounded-xl rounded-br-[2px] border px-4 py-3 text-sm text-skin-text animate-reveal-soft sm:max-w-[80%]"
+      :class="step.isInterruptReply ? 'border-skin-success/30 bg-skin-success/12' : 'border-skin-accent/20 bg-skin-accent/12'"
     >
+      <div v-if="step.isInterruptReply" class="mb-1 text-[10px] uppercase tracking-[0.9px] text-skin-success/90">
+        {{ step.interruptTool === 'human_context' ? 'Context Reply' : 'Selected Option' }}
+      </div>
       <div>{{ step.content }}</div>
     </div>
 
@@ -44,6 +48,11 @@ const handleCopy = async () => {
 
     <div v-else-if="step.type === 'action'" class="flex max-w-full items-center gap-2 px-2.5 py-1.5 text-[13px] text-skin-muted">
       <div class="shrink-0 text-sm"><span class="i i-zap"></span></div>
+      <div class="truncate">{{ step.content }}</div>
+    </div>
+
+    <div v-else-if="step.type === 'interrupt'" class="flex max-w-full items-center gap-2 px-2.5 py-1.5 text-[13px] text-skin-accent">
+      <div class="shrink-0 text-sm"><span class="i i-user-check"></span></div>
       <div class="truncate">{{ step.content }}</div>
     </div>
 

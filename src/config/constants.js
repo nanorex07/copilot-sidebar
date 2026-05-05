@@ -36,7 +36,8 @@ export const DEFAULT_USER_SETTINGS = {
 export const DEFAULT_AGENT_LIMITS = {
   AGENT_MAX_STEPS: 50,
   AGENT_MAX_TOOL_ERRORS: 5,
-  TRIGGER_CONTEXT_SUMMARIZE_AFTER: 100
+  TRIGGER_CONTEXT_SUMMARIZE_AFTER: 100,
+  HUMAN_IN_THE_LOOP_MAX_OPTIONS: 4
 };
 
 // ── Page Extraction ──
@@ -53,6 +54,7 @@ export const STEP_TYPES = {
   THOUGHT: 'thought',
   ACTION: 'action',
   TOOL_CALL: 'tool_call',
+  INTERRUPT: 'interrupt',
   ERROR: 'error',
   SUCCESS: 'success',
   USER: 'user'
