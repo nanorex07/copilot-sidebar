@@ -31,4 +31,5 @@ playwright-report/
 # coding tools
 .agents/
 .claude/
+.codex/
 CLAUDE.md

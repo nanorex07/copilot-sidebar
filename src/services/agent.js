@@ -17,8 +17,10 @@ export class Agent {
       this.status = 'idle';
       this._onStep = null;
       this._onStatus = null;
+      this._onHumanInput = null;
       this._aborted = false;
       this._abortController = null;
+      this._pendingHumanInput = null;
    }
 
    async init() {
@@ -33,9 +35,14 @@ export class Agent {
 
    onStep(callback) { this._onStep = callback; }
    onStatus(callback) { this._onStatus = callback; }
+   onHumanInput(callback) { this._onHumanInput = callback; }
 
    abort() {
       this._aborted = true;
+      if (this._pendingHumanInput) {
+         this._pendingHumanInput.reject(new Error('Aborted while waiting for human input.'));
+         this._pendingHumanInput = null;
+      }
       if (this._abortController) {
          this._abortController.abort();
       }
@@ -71,12 +78,15 @@ export class Agent {
          const AGENT_MAX_STEPS = agentLimits.AGENT_MAX_STEPS;
          const AGENT_MAX_TOOL_ERRORS = agentLimits.AGENT_MAX_TOOL_ERRORS;
          const agentTools = new AgentTools(this.context, this._notifyStep.bind(this), {
-            highlight: userSettings.highlightActions
+            highlight: userSettings.highlightActions,
+            requestHumanInput: this._requestHumanInput.bind(this)
          });
 
          const contentActionSender = this._sendToContent.bind(this);
 
          while (step < AGENT_MAX_STEPS && errorCount < AGENT_MAX_TOOL_ERRORS && !this._aborted) {
+            console.log('[Agent] Running step', step);
+
             step++;
 
             systemPrompt = await this._getBaseSystemPrompt();
@@ -299,7 +309,48 @@ export class Agent {
       }
    }
 
-   _notifyStatus() {
+   _notifyStatus(status = null) {
+      if (status) this.status = status;
       if (this._onStatus) this._onStatus(this.status);
+   }
+
+   async _requestHumanInput(payload) {
+      if (!this._onHumanInput) {
+         throw new Error('No human input handler registered.');
+      }
+
+      this.status = 'waiting_for_input';
+      this._notifyStatus();
+
+      return new Promise((resolve, reject) => {
+         this._pendingHumanInput = { resolve, reject, payload };
+         this._onHumanInput({
+            ...payload,
+            timestamp: this._timestamp(),
+         });
+      });
+   }
+
+   async submitHumanInput(selection) {
+      if (!this._pendingHumanInput) return;
+      const pending = this._pendingHumanInput;
+      this._pendingHumanInput = null;
+
+      const inputText = String(selection ?? '');
+      this.context.addEntry({
+         role: 'user',
+         content: inputText,
+         _meta: {
+            fromInterrupt: true,
+            interruptTool: pending.payload?.interruptTool || 'human_input',
+            question: pending.payload?.question || ''
+         },
+         timestamp: this._timestamp()
+      });
+      await this.context.persist();
+
+      pending.resolve(selection);
+      this.status = 'running';
+      this._notifyStatus();
    }
 }

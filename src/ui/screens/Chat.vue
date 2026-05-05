@@ -7,12 +7,16 @@ import { STEP_TYPES } from '../../config/constants'
 import ChatShowcase from '../components/ChatShowcase.vue'
 import ChatStep from '../components/ChatStep.vue'
 import ChatInput from '../components/ChatInput.vue'
+import HumanInputPrompt from '../components/HumanInputPrompt.vue'
 
 const goal = ref('')
 const steps = ref([])
 const isRunning = ref(false)
 const isGenerating = ref(false)
+const agentStatus = ref('idle')
 const stepsContainer = ref(null)
+const pendingHumanPrompt = ref(null)
+const chatInputRef = ref(null)
 
 const agent = new Agent('main-session')
 
@@ -30,27 +34,46 @@ onMounted(async () => {
   })
 
   agent.onStatus((status) => {
-    isRunning.value = (status === 'running' || status === 'thinking')
+    agentStatus.value = status
+    isRunning.value = (status === 'running' || status === 'thinking' || status === 'waiting_for_input')
     isGenerating.value = (status === 'thinking')
   })
 
-  // Reconstruct UI steps from persisted history
+  agent.onHumanInput((payload) => {
+    pendingHumanPrompt.value = payload
+    steps.value.push({
+      type: STEP_TYPES.INTERRUPT,
+      content: payload.question,
+      timestamp: payload.timestamp,
+    })
+    scrollToBottom()
+    if (payload.inputType === 'text') {
+      nextTick(() => {
+        chatInputRef.value?.focusInput?.()
+      })
+    }
+  })
+
   if (agent.history.length > 0) {
     for (const entry of agent.history) {
       const timestamp = entry.timestamp || '-'
-
-      if (entry._isSummary) continue;
+      if (entry._isSummary) continue
 
       if (entry.role === 'user') {
-        steps.value.push({ type: STEP_TYPES.USER, content: entry.content, timestamp })
+        steps.value.push({
+          type: STEP_TYPES.USER,
+          content: entry.content,
+          timestamp,
+          isInterruptReply: !!entry?._meta?.fromInterrupt,
+          interruptTool: entry?._meta?.interruptTool || null,
+          interruptQuestion: entry?._meta?.question || ''
+        })
       } else if (entry.role === 'assistant' && entry.tool_calls) {
-        // Assistant message that triggered tool calls — show content as thought if present
         if (entry.content) {
           steps.value.push({ type: STEP_TYPES.THOUGHT, content: entry.content, timestamp })
         }
         continue
       } else if (entry.role === 'tool' && entry._meta) {
-        // Tool result with metadata — show as a combined tool_call step
         const meta = entry._meta
         steps.value.push({
           type: STEP_TYPES.TOOL_CALL,
@@ -64,9 +87,6 @@ onMounted(async () => {
           resultCollapsed: true,
           timestamp,
         })
-      } else if (entry.role === 'tool') {
-        // Tool result without metadata (shouldn't happen, but be safe)
-        continue
       } else if (entry.role === 'assistant') {
         steps.value.push({
           type: STEP_TYPES.SUCCESS,
@@ -79,20 +99,15 @@ onMounted(async () => {
   }
 })
 
-/**
- * Enrich a raw step emitted by the agent with parsed data for the UI
- */
 function enrichStep(step) {
-  const enriched = { 
-    ...step, 
-    collapsed: true, 
-    argsCollapsed: true, 
-    resultCollapsed: true 
+  const enriched = {
+    ...step,
+    collapsed: true,
+    argsCollapsed: true,
+    resultCollapsed: true
   }
 
-  if (step.type === STEP_TYPES.SUCCESS) {
-    enriched.html = parseMarkdown(step.content)
-  }
+  if (step.type === STEP_TYPES.SUCCESS) enriched.html = parseMarkdown(step.content)
 
   if (step.type === STEP_TYPES.TOOL_CALL) {
     try {
@@ -110,9 +125,6 @@ function enrichStep(step) {
   return enriched
 }
 
-/**
- * Create a human-readable label for a tool call
- */
 function formatToolLabel(tool, args) {
   switch (tool) {
     case 'read_page': return `Reading page (${args.mode || 'compact'} mode)`
@@ -130,20 +142,22 @@ function formatToolLabel(tool, args) {
     case 'navigate': return `Navigating ${args.action}`
     case 'done': return `Task complete`
     case 'fail': return `Task failed: ${args.reason || ''}`
+    case 'human_in_the_loop': return `Waiting for user choice`
+    case 'human_context': return `Waiting for user context`
     default: return `${tool}(${JSON.stringify(args)})`
   }
 }
 
 function toggleCollapse(index) {
-  if(steps.value[index]) steps.value[index].collapsed = !steps.value[index].collapsed
+  if (steps.value[index]) steps.value[index].collapsed = !steps.value[index].collapsed
 }
 
 function toggleArgs(index) {
-  if(steps.value[index]) steps.value[index].argsCollapsed = !steps.value[index].argsCollapsed
+  if (steps.value[index]) steps.value[index].argsCollapsed = !steps.value[index].argsCollapsed
 }
 
 function toggleResult(index) {
-  if(steps.value[index]) steps.value[index].resultCollapsed = !steps.value[index].resultCollapsed
+  if (steps.value[index]) steps.value[index].resultCollapsed = !steps.value[index].resultCollapsed
 }
 
 function toggleThought(index) {
@@ -160,7 +174,27 @@ const scrollToBottom = async () => {
 }
 
 const handleSend = async (text) => {
-  if (!text.trim() || isRunning.value) return
+  if (!text.trim()) return
+
+  if (agentStatus.value === 'waiting_for_input' && pendingHumanPrompt.value?.inputType === 'text') {
+    const userReply = text
+    goal.value = ''
+    steps.value.push({
+      type: STEP_TYPES.USER,
+      content: userReply,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isInterruptReply: true,
+      interruptTool: 'human_context',
+      interruptQuestion: pendingHumanPrompt.value?.question || ''
+    })
+    pendingHumanPrompt.value = null
+    await agent.submitHumanInput(userReply)
+    scrollToBottom()
+    return
+  }
+
+  if (isRunning.value) return
+
   const userGoal = text
   goal.value = ''
   steps.value.push({
@@ -174,27 +208,41 @@ const handleSend = async (text) => {
 
 const handleStop = () => {
   agent.abort()
+  pendingHumanPrompt.value = null
+}
+
+const handleHumanSelection = async (option) => {
+  steps.value.push({
+    type: STEP_TYPES.USER,
+    content: option,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    isInterruptReply: true,
+    interruptTool: 'human_in_the_loop',
+    interruptQuestion: pendingHumanPrompt.value?.question || ''
+  })
+  pendingHumanPrompt.value = null
+  await agent.submitHumanInput(option)
+  scrollToBottom()
 }
 
 const clearHistory = async () => {
   await agent.clearHistory()
   steps.value = []
+  pendingHumanPrompt.value = null
 }
 
 defineExpose({ clearHistory })
 </script>
 
 <template>
-  <div class="chat-view">
-    <div class="steps-container" ref="stepsContainer">
-      <!-- Empty state / Showcase -->
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div ref="stepsContainer" class="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4 sm:px-5">
       <ChatShowcase v-if="steps.length === 0" />
 
-      <!-- Steps -->
-      <ChatStep 
-        v-for="(step, index) in steps" 
-        :key="index" 
-        :step="step" 
+      <ChatStep
+        v-for="(step, index) in steps"
+        :key="index"
+        :step="step"
         :index="index"
         @toggleCollapse="toggleCollapse"
         @toggleArgs="toggleArgs"
@@ -202,103 +250,30 @@ defineExpose({ clearHistory })
         @toggleThought="toggleThought"
       />
 
-      <!-- Thinking Loader -->
-      <div v-if="isGenerating" class="step-wrapper thought">
-        <div class="step thought">
-          <div class="step-icon"><span class="i i-brain"></span></div>
-          <div class="typing-indicator">
-            <span></span>
-            <span></span>
-            <span></span>
+      <div v-if="isGenerating" class="flex w-full">
+        <div class="flex max-w-full items-center gap-2 px-2.5 py-1.5 text-[13px] text-skin-muted">
+          <div class="text-sm"><span class="i i-brain"></span></div>
+          <div class="flex min-h-5 items-center gap-1 py-1">
+            <span class="h-1.5 w-1.5 animate-typing rounded-full bg-skin-text/60 shadow-[0_0_4px_rgba(255,255,255,0.1)]"></span>
+            <span class="h-1.5 w-1.5 animate-typing rounded-full bg-skin-text/60 shadow-[0_0_4px_rgba(255,255,255,0.1)] [animation-delay:-0.16s]"></span>
+            <span class="h-1.5 w-1.5 animate-typing rounded-full bg-skin-text/60 shadow-[0_0_4px_rgba(255,255,255,0.1)] [animation-delay:-0.32s]"></span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Input area -->
-    <ChatInput 
-      v-model="goal" 
-      :isRunning="isRunning" 
-      @send="handleSend" 
-      @stop="handleStop" 
+    <HumanInputPrompt
+      v-if="pendingHumanPrompt && pendingHumanPrompt.inputType === 'choice'"
+      :prompt="pendingHumanPrompt"
+      @select="handleHumanSelection"
+    />
+    <ChatInput
+      ref="chatInputRef"
+      v-model="goal"
+      :isRunning="isRunning"
+      :inputEnabled="!isRunning || (agentStatus === 'waiting_for_input' && pendingHumanPrompt?.inputType === 'text')"
+      @send="handleSend"
+      @stop="handleStop"
     />
   </div>
 </template>
-
-<style scoped>
-.chat-view {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.steps-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Base step styles used for the thinking indicator */
-.step-wrapper {
-  display: flex;
-  width: 100%;
-}
-.step {
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 14px;
-  word-break: break-word;
-  animation: reveal-soft 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-  max-width: 95%;
-}
-.step.thought {
-  background: transparent;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text2);
-  max-width: 100%;
-}
-.step-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.typing-indicator {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  padding: 4px 0;
-  min-height: 20px;
-}
-
-.typing-indicator span {
-  width: 6px;
-  height: 6px;
-  background: var(--text);
-  border-radius: 50%;
-  display: inline-block;
-  opacity: 0.6;
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.1);
-  animation: typing 1.4s infinite ease-in-out both;
-}
-
-.typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-.typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes typing {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
-  40% { transform: scale(1.1); opacity: 1; }
-}
-
-@keyframes reveal-soft {
-  0% { opacity: 0; transform: translateY(4px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-</style>

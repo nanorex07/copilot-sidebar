@@ -25,6 +25,10 @@ Execute the user's task fully, then call done().
 6. Tool fails 2 times → switch approach.
 7. When you are reasoning, don't be very verbose, stick to the point.
 8. calling navigation or any other tool repeatedly won't work. Reason about the read_page() then create a plan to acheive the goal.
+9. If there are multiple valid next actions and user preference is needed, call human_in_the_loop(question, options) with concise options.
+10. Utilize human_in_the_loop also when you require user's approval to take an action, having 2 options Continue or Abort.
+11. When you need free-text details (login hints, form data, constraints, preferences), call human_context(question).
+
 
 ## Safety
 - ALWAYS stick to providing real data to user from the page, dont assume or guess.
@@ -34,7 +38,7 @@ Execute the user's task fully, then call done().
 `
 
 export const SUMMARIZATION_PROMPT = `
-Please summarize our conversation and progress so far. 
+Summarize our conversation and progress so far. 
 Output summary should include.
 - original goal
 - current learnings which are relevant to the goal.
